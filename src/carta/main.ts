@@ -61,6 +61,7 @@ function syncDetailFromUrl(): void {
 async function fetchMenu(lang: string): Promise<MenuResponse> {
   const res = await fetch(`/api/menu?lang=${encodeURIComponent(lang)}`, {
     headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`No se pudo cargar la carta (${res.status})`);
   return (await res.json()) as MenuResponse;
@@ -162,7 +163,10 @@ function paintMain(): void {
   }
 
   if (menu.offers.length) {
-    const sec = el("section", { attrs: { id: "sec-offers" } });
+    const sec = el("section", {
+      className: menu.showImages ? undefined : "section--text",
+      attrs: { id: "sec-offers" },
+    });
     sec.appendChild(
       el("div", {
         className: "section__head",
@@ -172,9 +176,13 @@ function paintMain(): void {
         ],
       }),
     );
+    const list = el("div", {
+      className: menu.showImages ? "section__items" : "section__items section__items--text",
+    });
     for (const o of menu.offers) {
-      sec.appendChild(renderOfferCard(o, menu, currencyCode));
+      list.appendChild(renderOfferCard(o, menu, currencyCode));
     }
+    sec.appendChild(list);
     main.appendChild(sec);
   }
 
@@ -183,13 +191,29 @@ function paintMain(): void {
   }
 }
 
+function syncStickyOffset(): void {
+  const top = document.getElementById("top");
+  if (!top) return;
+  const h = Math.ceil(top.getBoundingClientRect().height);
+  document.documentElement.style.setProperty("--header-h", `${h}px`);
+}
+
 function paintChrome(): void {
   if (!menu) return;
+  const app = document.getElementById("app");
   const name = document.getElementById("restaurant-name");
-  const welcome = document.getElementById("welcome");
+  const welcome = document.getElementById("welcome") as HTMLElement | null;
   const footer = document.getElementById("footer");
+  if (app) {
+    app.classList.toggle("app--text", !menu.showImages);
+    app.classList.toggle("app--photos", menu.showImages);
+  }
   if (name) name.textContent = menu.restaurant.name;
-  if (welcome) welcome.textContent = menu.restaurant.welcome ?? "";
+  if (welcome) {
+    const text = menu.restaurant.welcome?.trim() ?? "";
+    welcome.textContent = text;
+    welcome.hidden = text.length === 0;
+  }
   if (footer) {
     clear(footer);
     footer.appendChild(el("strong", { text: menu.restaurant.name }));
@@ -206,6 +230,8 @@ function paint(): void {
   paintRate();
   paintNav();
   paintMain();
+  syncStickyOffset();
+  requestAnimationFrame(syncStickyOffset);
 }
 
 async function switchLang(code: string): Promise<void> {
@@ -241,8 +267,13 @@ async function load(langHint?: string): Promise<void> {
 }
 
 window.addEventListener("popstate", () => syncDetailFromUrl());
+window.addEventListener("resize", () => syncStickyOffset());
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && detailRoot) closeDetail();
+});
+// Al volver a la pestaña (p. ej. tras cambiar ajustes en Admin), refrescar carta
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void load(menu?.lang);
 });
 
 void load();

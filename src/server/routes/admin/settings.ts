@@ -10,6 +10,7 @@ const ALLOWED = new Set([
   "carta.default_lang",
   "carta.default_currency",
   "carta.show_rate",
+  "carta.show_images",
   "carta.second_currency",
   "carta.soldout_position",
   "wifi.ssid",
@@ -66,6 +67,10 @@ export function settingsAdmin(ctx: AppContext) {
 
     for (const [key, value] of Object.entries(body)) {
       if (key === "admin.pin") continue;
+      if (key === "carta.show_images" || key === "carta.show_rate") {
+        repos.settings.setJson(key, value === true || value === "true");
+        continue;
+      }
       repos.settings.setJson(key, value);
     }
 

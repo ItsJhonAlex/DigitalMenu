@@ -86,6 +86,8 @@ export type MenuResponse = {
     welcome: string | null;
     footer: string | null;
   };
+  /** Si false, la carta usa vista solo texto (sin huecos de foto). */
+  showImages: boolean;
   ui: Record<string, string>;
   offers: MenuOffer[];
   categories: MenuCategory[];

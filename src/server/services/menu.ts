@@ -52,6 +52,17 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
     return Math.floor(row.v);
   };
 
+  /** Incluye show_rate / show_images / textos, etc. para invalidar ETag y caché. */
+  const cartaSettingsRev = (): string => {
+    const row = opts.db
+      .prepare(
+        `SELECT COALESCE(MAX(updated_at), '') AS t
+         FROM settings WHERE key LIKE 'carta.%'`,
+      )
+      .get() as { t: string };
+    return row.t;
+  };
+
   const imageOf = (hash: string | null): MenuImage => {
     if (!hash) return null;
     return { thumb: `/img/${hash}_t.webp`, large: `/img/${hash}.webp` };
@@ -95,6 +106,7 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
     );
     const second = opts.repos.settings.getJson<string | null>("carta.second_currency", null);
     const showRate = opts.repos.settings.getJson<boolean>("carta.show_rate", true);
+    const showImages = opts.repos.settings.getJson<boolean>("carta.show_images", true);
 
     const list: CurrencyDto[] = currencies.map((c) => ({
       code: c.code,
@@ -190,6 +202,7 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
         list,
       },
       restaurant,
+      showImages,
       ui: uiBase,
       offers: offersOut,
       categories: categoriesOut,
@@ -203,14 +216,15 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
     get(requestedLang: string | undefined): { body: MenuResponse; etag: string } {
       const { lang, requestedLang: req } = resolveLang(requestedLang);
       const version = contentVersion();
-      const cacheKey = `${lang}:${version}`;
+      const settingsRev = cartaSettingsRev();
+      const cacheKey = `${lang}:${version}:${settingsRev}`;
       const hit = cache.get(cacheKey);
       if (hit) return { body: hit.body, etag: hit.etag };
 
       const body = build(lang, req);
-      const etag = `"m-${body.version}-${lang}"`;
+      // settingsRev en ETag: evita 304 del navegador tras cambiar tasa/fotos
+      const etag = `"m-${body.version}-${lang}-${settingsRev}"`;
       cache.set(cacheKey, { body, etag, builtAt: Date.now() });
-      // Evitar crecer sin límite
       if (cache.size > 12) {
         const first = cache.keys().next().value;
         if (first) cache.delete(first);

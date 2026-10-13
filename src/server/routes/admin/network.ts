@@ -49,7 +49,16 @@ export function networkAdmin(ctx: AppContext) {
 
   app.put("/api/admin/wifi", async (c) => {
     const body = requireObject(await c.req.json());
-    const ssid = requireString(body.ssid, "ssid", 1, 32);
+    // ssid vacío = sin Wi‑Fi de clientes (tarjeta solo con QR de la carta)
+    const ssidRaw = typeof body.ssid === "string" ? body.ssid.trim() : "";
+    if (!ssidRaw) {
+      repos.settings.setJson("wifi.ssid", null);
+      repos.settings.setJson("wifi.password", "");
+      return c.json({ ok: true, cleared: true });
+    }
+    if (ssidRaw.length > 32) {
+      throw validationError("ssid demasiado largo", [{ field: "ssid", issue: "range" }]);
+    }
     const security = requireString(body.security ?? "WPA", "security") as WifiSecurity;
     if (!["WPA", "WEP", "nopass"].includes(security)) {
       throw validationError("security inválida");
@@ -61,7 +70,7 @@ export function networkAdmin(ctx: AppContext) {
       ]);
     }
     const hidden = body.hidden === true;
-    repos.settings.setJson("wifi.ssid", ssid);
+    repos.settings.setJson("wifi.ssid", ssidRaw);
     repos.settings.setJson("wifi.password", security === "nopass" ? "" : password);
     repos.settings.setJson("wifi.security", security);
     repos.settings.setJson("wifi.hidden", hidden);

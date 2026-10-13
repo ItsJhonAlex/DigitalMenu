@@ -144,6 +144,33 @@ describe("API /api/menu", () => {
     expect(money.headers.get("Content-Type")).toContain("javascript");
   });
 
+  test("respeta carta.show_images y show_rate (sin 304 obsoleto)", async () => {
+    const { app, repos } = setup();
+    const withDefault = await app.request("http://localhost:8080/api/menu", { headers: host });
+    const first = (await withDefault.json()) as MenuResponse;
+    expect(first.showImages).toBe(true);
+    expect(first.currency.showRate).toBe(true);
+    const etag1 = withDefault.headers.get("ETag");
+
+    repos.settings.setJson("carta.show_images", false);
+    const offImg = await app.request("http://localhost:8080/api/menu", {
+      headers: { ...host, "If-None-Match": etag1! },
+    });
+    expect(offImg.status).toBe(200);
+    expect(((await offImg.json()) as MenuResponse).showImages).toBe(false);
+    const etag2 = offImg.headers.get("ETag");
+    expect(etag2).not.toBe(etag1);
+
+    repos.settings.setJson("carta.show_rate", false);
+    const offRate = await app.request("http://localhost:8080/api/menu", {
+      headers: { ...host, "If-None-Match": etag2! },
+    });
+    expect(offRate.status).toBe(200);
+    const body = (await offRate.json()) as MenuResponse;
+    expect(body.currency.showRate).toBe(false);
+    expect(body.showImages).toBe(false);
+  });
+
   test("oculta productos no visibles", async () => {
     const { app, repos } = setup();
     const cats = repos.categories.list();

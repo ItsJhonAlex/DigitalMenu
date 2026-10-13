@@ -1,4 +1,4 @@
-import { api, type NetworkState } from "./api";
+import { type NetworkState, api } from "./api";
 import { BRAND } from "./brand";
 import { clear, el } from "./dom";
 import { showToast } from "./toast";
@@ -55,7 +55,7 @@ const routes: Route[] = [
     label: "Ofertas",
     icon: "%",
     title: "Ofertas y combos",
-    sub: "Precios especiales y componentes",
+    sub: "Promociones, paquetes y activo en carta",
     render: renderOfertas,
   },
   {
@@ -102,6 +102,12 @@ function currentPath(): string {
 }
 
 function findRoute(path: string): Route {
+  if (path === "/productos" || path.startsWith("/productos/")) {
+    return routes.find((r) => r.path === "/productos")!;
+  }
+  if (path === "/ofertas" || path.startsWith("/ofertas/")) {
+    return routes.find((r) => r.path === "/ofertas")!;
+  }
   return routes.find((r) => r.path === path) ?? routes[0]!;
 }
 
@@ -111,8 +117,14 @@ function buildNav(): void {
   clear(nav);
   const path = currentPath();
   for (const r of routes) {
+    const active =
+      r.path === "/productos"
+        ? path === "/productos" || path.startsWith("/productos/")
+        : r.path === "/ofertas"
+          ? path === "/ofertas" || path.startsWith("/ofertas/")
+          : r.path === path;
     const a = el("a", {
-      className: `nav-link${r.path === path ? " is-active" : ""}`,
+      className: `nav-link${active ? " is-active" : ""}`,
       attrs: { href: `#${r.path}` },
       children: [
         el("span", { className: "nav-link__icon", text: r.icon }),
@@ -156,12 +168,27 @@ async function refreshNetworkChrome(): Promise<void> {
 }
 
 async function render(): Promise<void> {
-  const route = findRoute(currentPath());
+  const path = currentPath();
+  const route = findRoute(path);
   buildNav();
   const title = document.getElementById("page-title");
   const sub = document.getElementById("page-sub");
-  if (title) title.textContent = route.title;
-  if (sub) sub.textContent = route.sub;
+  const editingProduct = /^\/productos\/editar\/\d+/.test(path);
+  const editingOffer = /^\/ofertas\/editar\/\d+/.test(path);
+  if (title) {
+    title.textContent = editingProduct
+      ? "Editar producto"
+      : editingOffer
+        ? "Editar oferta / combo"
+        : route.title;
+  }
+  if (sub) {
+    sub.textContent = editingProduct
+      ? "Ficha completa · idiomas, foto y precio"
+      : editingOffer
+        ? "Componentes, precio especial y estado en carta"
+        : route.sub;
+  }
 
   const content = document.getElementById("content");
   if (!content) return;

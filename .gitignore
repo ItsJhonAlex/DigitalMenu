@@ -5,6 +5,8 @@ dist/
 
 # Datos de desarrollo / POS (nunca en git)
 data/
+scripts/tmp-img/
+scripts/tmp-img/
 .env
 .env.*
 !.env.example

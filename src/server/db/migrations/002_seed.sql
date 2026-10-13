@@ -15,6 +15,7 @@ INSERT INTO settings (key, value) VALUES
   ('carta.default_lang', '"es"'),
   ('carta.default_currency', '"CUP"'),
   ('carta.show_rate', 'true'),
+  ('carta.show_images', 'true'),
   ('carta.second_currency', 'null'),
   ('carta.soldout_position', '"inline"'),
   ('wifi.security', '"WPA"'),

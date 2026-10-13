@@ -61,83 +61,208 @@ export function formatMenuPrice(
   return { primary, dual };
 }
 
-function media(url: string | null | undefined, alt: string): HTMLElement {
-  const wrap = el("div", { className: "card__media" });
-  if (url) {
-    wrap.appendChild(el("img", { attrs: { src: url, alt, loading: "lazy" } }));
+function bindOpen(
+  card: HTMLElement,
+  product: MenuProduct,
+  onOpen?: (p: MenuProduct) => void,
+): void {
+  if (!onOpen) return;
+  card.setAttribute("role", "button");
+  card.tabIndex = 0;
+  card.addEventListener("click", () => onOpen(product));
+  card.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      onOpen(product);
+    }
+  });
+}
+
+function priceBlock(
+  prices: { primary: string; dual: string | null },
+  extras?: Array<Node | null | undefined>,
+): HTMLElement {
+  const priceRow = el("div", { className: "card__price" });
+  if (extras) {
+    for (const n of extras) if (n) priceRow.appendChild(n);
   }
-  return wrap;
+  priceRow.appendChild(el("span", { className: "price", text: prices.primary }));
+  if (prices.dual) {
+    priceRow.appendChild(el("span", { className: "price--dual", text: prices.dual }));
+  }
+  return priceRow;
+}
+
+/** Línea de menú sin foto: nombre ····· precio + descripción. */
+function renderTextLine(opts: {
+  name: string;
+  description: string | null;
+  prices: { primary: string; dual: string | null };
+  available: boolean;
+  soldOut: string;
+  meta?: string | null;
+  className?: string;
+}): HTMLElement {
+  const line = el("article", {
+    className: `menu-line${opts.available ? "" : " is-sold"}${opts.className ? ` ${opts.className}` : ""}`,
+  });
+
+  const row = el("div", { className: "menu-line__row" });
+  const titleWrap = el("div", { className: "menu-line__title" });
+  titleWrap.appendChild(el("h3", { text: opts.name }));
+  if (!opts.available) {
+    titleWrap.appendChild(el("span", { className: "badge", text: opts.soldOut }));
+  }
+  const dots = el("span", {
+    className: "menu-line__dots",
+    attrs: { "aria-hidden": "true" },
+  });
+  const right = el("div", { className: "menu-line__price" });
+  right.appendChild(el("span", { className: "price", text: opts.prices.primary }));
+  if (opts.prices.dual) {
+    right.appendChild(el("span", { className: "price--dual", text: opts.prices.dual }));
+  }
+  row.append(titleWrap, dots, right);
+  line.appendChild(row);
+
+  if (opts.description) {
+    line.appendChild(el("p", { className: "menu-line__desc", text: opts.description }));
+  }
+  if (opts.meta) {
+    line.appendChild(el("p", { className: "menu-line__meta", text: opts.meta }));
+  }
+  return line;
+}
+
+/** full = platos; drink = bebidas/cócteles (foto horizontal amplia); compact = artículos */
+export type PhotoLayout = "full" | "drink" | "compact";
+
+function renderPhotoCard(
+  p: MenuProduct,
+  menu: MenuResponse,
+  currency: string,
+  layout: PhotoLayout,
+  onOpen?: (product: MenuProduct) => void,
+): HTMLElement {
+  const prices = formatMenuPrice(p.priceMinor, menu, currency);
+  const soldOut = menu.ui.soldOut ?? "Agotado";
+  const img = p.image?.large ?? p.image?.thumb;
+
+  if (layout === "compact") {
+    const card = el("article", {
+      className: `row-card${p.available ? "" : " is-sold"}`,
+    });
+    if (img) {
+      const mediaEl = el("div", { className: "row-card__media" });
+      mediaEl.appendChild(
+        el("img", { attrs: { src: p.image!.thumb ?? img, alt: p.name, loading: "lazy" } }),
+      );
+      card.appendChild(mediaEl);
+    }
+    const body = el("div", { className: "row-card__body" });
+    body.appendChild(el("h3", { text: p.name }));
+    if (p.description) body.appendChild(el("p", { text: p.description }));
+    body.appendChild(
+      priceBlock(prices, !p.available ? [el("span", { className: "badge", text: soldOut })] : []),
+    );
+    card.appendChild(body);
+    bindOpen(card, p, onOpen);
+    return card;
+  }
+
+  if (layout === "drink") {
+    const card = el("article", {
+      className: `drink-card${p.available ? "" : " is-sold"}`,
+    });
+    if (img) {
+      const mediaEl = el("div", { className: "drink-card__media" });
+      mediaEl.appendChild(el("img", { attrs: { src: img, alt: p.name, loading: "lazy" } }));
+      if (!p.available) {
+        mediaEl.appendChild(
+          el("div", {
+            className: "card__sold",
+            children: [el("span", { text: soldOut.toUpperCase() })],
+          }),
+        );
+      }
+      card.appendChild(mediaEl);
+    }
+    const body = el("div", { className: "drink-card__body" });
+    body.appendChild(el("h3", { text: p.name }));
+    if (p.description) body.appendChild(el("p", { text: p.description }));
+    if (!p.available && !img) {
+      body.appendChild(el("span", { className: "badge", text: soldOut }));
+    }
+    body.appendChild(priceBlock(prices));
+    card.appendChild(body);
+    bindOpen(card, p, onOpen);
+    return card;
+  }
+
+  const card = el("article", { className: `card${p.available ? "" : " is-sold"}` });
+  if (img) {
+    const mediaEl = el("div", { className: "card__media" });
+    mediaEl.appendChild(el("img", { attrs: { src: img, alt: p.name, loading: "lazy" } }));
+    if (!p.available) {
+      mediaEl.appendChild(
+        el("div", {
+          className: "card__sold",
+          children: [el("span", { text: soldOut.toUpperCase() })],
+        }),
+      );
+    }
+    card.appendChild(mediaEl);
+  }
+  const body = el("div", { className: "card__body" });
+  body.appendChild(el("h3", { text: p.name }));
+  if (p.description) body.appendChild(el("p", { text: p.description }));
+  if (!p.available && !img) {
+    body.appendChild(el("span", { className: "badge", text: soldOut }));
+  }
+  body.appendChild(priceBlock(prices));
+  card.appendChild(body);
+  bindOpen(card, p, onOpen);
+  return card;
+}
+
+export function layoutForProduct(p: MenuProduct): PhotoLayout {
+  if (p.type === "bebida") return "drink";
+  if (p.type === "articulo") return "compact";
+  return "full";
+}
+
+export function productHasImage(p: MenuProduct): boolean {
+  return Boolean(p.image?.thumb || p.image?.large);
+}
+
+/** Lista si fotos globales off, o si este producto no tiene imagen en Admin. */
+export function productShowsAsList(p: MenuProduct, menu: MenuResponse): boolean {
+  return !menu.showImages || !productHasImage(p);
 }
 
 export function renderProductCard(
   p: MenuProduct,
   menu: MenuResponse,
   currency: string,
-  compact: boolean,
+  layout: PhotoLayout,
   onOpen?: (product: MenuProduct) => void,
 ): HTMLElement {
   const prices = formatMenuPrice(p.priceMinor, menu, currency);
   const soldOut = menu.ui.soldOut ?? "Agotado";
 
-  const bindOpen = (card: HTMLElement) => {
-    card.setAttribute("role", "button");
-    card.tabIndex = 0;
-    card.addEventListener("click", () => onOpen?.(p));
-    card.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") {
-        ev.preventDefault();
-        onOpen?.(p);
-      }
+  if (productShowsAsList(p, menu)) {
+    const line = renderTextLine({
+      name: p.name,
+      description: p.description,
+      prices,
+      available: p.available,
+      soldOut,
     });
-  };
-
-  if (compact) {
-    const card = el("article", {
-      className: `row-card${p.available ? "" : " is-sold"}`,
-    });
-    const mediaEl = el("div", { className: "row-card__media" });
-    if (p.image?.thumb) {
-      mediaEl.appendChild(
-        el("img", { attrs: { src: p.image.thumb, alt: p.name, loading: "lazy" } }),
-      );
-    }
-    const body = el("div", { className: "row-card__body" });
-    body.appendChild(el("h3", { text: p.name }));
-    if (p.description) body.appendChild(el("p", { text: p.description }));
-    const priceRow = el("div", { className: "card__price" });
-    if (!p.available) {
-      priceRow.appendChild(el("span", { className: "badge", text: soldOut }));
-    }
-    priceRow.appendChild(el("span", { className: "price", text: prices.primary }));
-    if (prices.dual)
-      priceRow.appendChild(el("span", { className: "price--dual", text: prices.dual }));
-    body.appendChild(priceRow);
-    card.append(mediaEl, body);
-    bindOpen(card);
-    return card;
+    bindOpen(line, p, onOpen);
+    return line;
   }
 
-  const card = el("article", { className: `card${p.available ? "" : " is-sold"}` });
-  const mediaEl = media(p.image?.large ?? p.image?.thumb, p.name);
-  if (!p.available) {
-    mediaEl.appendChild(
-      el("div", {
-        className: "card__sold",
-        children: [el("span", { text: soldOut.toUpperCase() })],
-      }),
-    );
-  }
-  const body = el("div", { className: "card__body" });
-  body.appendChild(el("h3", { text: p.name }));
-  if (p.description) body.appendChild(el("p", { text: p.description }));
-  const priceRow = el("div", { className: "card__price" });
-  priceRow.appendChild(el("span", { className: "price", text: prices.primary }));
-  if (prices.dual)
-    priceRow.appendChild(el("span", { className: "price--dual", text: prices.dual }));
-  body.appendChild(priceRow);
-  card.append(mediaEl, body);
-  bindOpen(card);
-  return card;
+  return renderPhotoCard(p, menu, currency, layout, onOpen);
 }
 
 export function renderProductDetail(
@@ -151,12 +276,10 @@ export function renderProductDetail(
     className: "detail-backdrop",
     attrs: { role: "dialog", "aria-modal": "true", "aria-label": p.name },
   });
-  const sheet = el("div", { className: "detail" });
-  const mediaEl = el("div", { className: "detail__media" });
-  const imgUrl = p.image?.large ?? p.image?.thumb;
-  if (imgUrl) {
-    mediaEl.appendChild(el("img", { attrs: { src: imgUrl, alt: p.name } }));
-  }
+  const sheet = el("div", {
+    className: `detail${menu.showImages && (p.image?.large || p.image?.thumb) ? "" : " detail--text"}`,
+  });
+
   const closeBtn = el("button", {
     className: "detail__close",
     text: "×",
@@ -166,7 +289,18 @@ export function renderProductDetail(
     ev.stopPropagation();
     onClose();
   });
-  mediaEl.appendChild(closeBtn);
+
+  const imgUrl = menu.showImages ? (p.image?.large ?? p.image?.thumb) : null;
+  if (imgUrl) {
+    const mediaEl = el("div", { className: "detail__media" });
+    mediaEl.appendChild(el("img", { attrs: { src: imgUrl, alt: p.name } }));
+    mediaEl.appendChild(closeBtn);
+    sheet.appendChild(mediaEl);
+  } else {
+    const bar = el("div", { className: "detail__bar" });
+    bar.appendChild(closeBtn);
+    sheet.appendChild(bar);
+  }
 
   const body = el("div", { className: "detail__body" });
   body.appendChild(el("h2", { text: p.name }));
@@ -174,13 +308,9 @@ export function renderProductDetail(
   if (!p.available) {
     body.appendChild(el("span", { className: "badge", text: menu.ui.soldOut ?? "Agotado" }));
   }
-  const priceRow = el("div", { className: "card__price" });
-  priceRow.appendChild(el("span", { className: "price", text: prices.primary }));
-  if (prices.dual)
-    priceRow.appendChild(el("span", { className: "price--dual", text: prices.dual }));
-  body.appendChild(priceRow);
+  body.appendChild(priceBlock(prices));
+  sheet.appendChild(body);
 
-  sheet.append(mediaEl, body);
   backdrop.appendChild(sheet);
   backdrop.addEventListener("click", (ev) => {
     if (ev.target === backdrop) onClose();
@@ -190,36 +320,66 @@ export function renderProductDetail(
 
 export function renderOfferCard(o: MenuOffer, menu: MenuResponse, currency: string): HTMLElement {
   const prices = formatMenuPrice(o.priceMinor, menu, currency);
+  const soldOut = menu.ui.soldOut ?? "Agotado";
+  const meta = o.items.length ? o.items.map((i) => `${i.quantity}× ${i.name}`).join(" · ") : null;
+  const hasImage = Boolean(o.image?.thumb || o.image?.large);
+
+  if (!menu.showImages || !hasImage) {
+    const struck =
+      o.showSavings && o.regularMinor != null && o.regularMinor > o.priceMinor
+        ? formatMenuPrice(o.regularMinor, menu, currency).primary
+        : null;
+    const line = renderTextLine({
+      name: o.name,
+      description: o.description,
+      prices,
+      available: o.available,
+      soldOut,
+      meta,
+      className: "menu-line--offer",
+    });
+    if (struck) {
+      const priceEl = line.querySelector(".menu-line__price");
+      if (priceEl) {
+        priceEl.insertBefore(
+          el("span", { className: "price--struck", text: struck }),
+          priceEl.firstChild,
+        );
+      }
+    }
+    return line;
+  }
+
   const card = el("article", { className: `card${o.available ? "" : " is-sold"}` });
-  const mediaEl = media(o.image?.large ?? o.image?.thumb, o.name);
-  if (!o.available) {
-    mediaEl.appendChild(
-      el("div", {
-        className: "card__sold",
-        children: [el("span", { text: (menu.ui.soldOut ?? "Agotado").toUpperCase() })],
-      }),
-    );
+  const img = o.image?.large ?? o.image?.thumb;
+  if (img) {
+    const mediaEl = el("div", { className: "card__media" });
+    mediaEl.appendChild(el("img", { attrs: { src: img, alt: o.name, loading: "lazy" } }));
+    if (!o.available) {
+      mediaEl.appendChild(
+        el("div", {
+          className: "card__sold",
+          children: [el("span", { text: soldOut.toUpperCase() })],
+        }),
+      );
+    }
+    card.appendChild(mediaEl);
   }
   const body = el("div", { className: "card__body" });
   body.appendChild(el("h3", { text: o.name }));
   if (o.description) body.appendChild(el("p", { text: o.description }));
-  if (o.items.length) {
-    body.appendChild(
-      el("p", {
-        text: o.items.map((i) => `${i.quantity}× ${i.name}`).join(" · "),
+  if (meta) body.appendChild(el("p", { text: meta }));
+  const extras: Array<Node | null> = [];
+  if (o.showSavings && o.regularMinor != null && o.regularMinor > o.priceMinor) {
+    extras.push(
+      el("span", {
+        className: "price--struck",
+        text: formatMenuPrice(o.regularMinor, menu, currency).primary,
       }),
     );
   }
-  const priceRow = el("div", { className: "card__price" });
-  if (o.showSavings && o.regularMinor != null && o.regularMinor > o.priceMinor) {
-    const struck = formatMenuPrice(o.regularMinor, menu, currency).primary;
-    priceRow.appendChild(el("span", { className: "price--struck", text: struck }));
-  }
-  priceRow.appendChild(el("span", { className: "price", text: prices.primary }));
-  if (prices.dual)
-    priceRow.appendChild(el("span", { className: "price--dual", text: prices.dual }));
-  body.appendChild(priceRow);
-  card.append(mediaEl, body);
+  body.appendChild(priceBlock(prices, extras));
+  card.appendChild(body);
   return card;
 }
 
@@ -229,16 +389,39 @@ export function renderCategorySection(
   currency: string,
   onOpen?: (product: MenuProduct) => void,
 ): HTMLElement {
-  const section = el("section", { attrs: { id: `cat-${cat.id}` } });
+  const allList = cat.products.every((p) => productShowsAsList(p, menu));
+  const section = el("section", {
+    className: allList || !menu.showImages ? "section--text" : undefined,
+    attrs: { id: `cat-${cat.id}` },
+  });
   section.appendChild(
     el("div", {
       className: "section__head",
       children: [el("h2", { text: cat.name })],
     }),
   );
-  const compact = cat.products.every((p) => p.type === "bebida" || p.type === "articulo");
+
+  const root = el("div", { className: "section__items" });
+
+  // Agrupa ítems sin foto en bloques de lista (aunque la carta tenga fotos activas)
+  let listGroup: HTMLElement | null = null;
+  const flushList = () => {
+    listGroup = null;
+  };
+
   for (const p of cat.products) {
-    section.appendChild(renderProductCard(p, menu, currency, compact, onOpen));
+    if (productShowsAsList(p, menu)) {
+      if (!listGroup) {
+        listGroup = el("div", { className: "section__items--text" });
+        root.appendChild(listGroup);
+      }
+      listGroup.appendChild(renderProductCard(p, menu, currency, layoutForProduct(p), onOpen));
+    } else {
+      flushList();
+      root.appendChild(renderProductCard(p, menu, currency, layoutForProduct(p), onOpen));
+    }
   }
+
+  section.appendChild(root);
   return section;
 }
