@@ -9,9 +9,15 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
  */
 export const localOnly = (port: number, opts: { looseHost?: boolean } = {}): MiddlewareHandler => {
   return async (c, next) => {
-    const info = getConnInfo(c);
-    const ip = info.remote.address ?? "";
-    if (!LOOPBACK.has(ip)) {
+    let ip = "";
+    try {
+      ip = getConnInfo(c).remote.address ?? "";
+    } catch {
+      // app.request() / sin Bun.serve: no hay conninfo
+      ip = "";
+    }
+    // En --dev / tests (app.request sin socket) la IP puede venir vacía
+    if (!LOOPBACK.has(ip) && !(opts.looseHost && ip === "")) {
       return c.text("Forbidden", 403);
     }
 

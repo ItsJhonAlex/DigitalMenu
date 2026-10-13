@@ -19,7 +19,6 @@ export function createSettingsRepo(db: Database) {
     get(key: string): SettingRow | null {
       return (getStmt.get(key) as SettingRow | null) ?? null;
     },
-    /** Devuelve el JSON parseado, o `fallback` si no existe. */
     getJson<T>(key: string, fallback: T): T {
       const row = this.get(key);
       if (!row) return fallback;
@@ -35,7 +34,6 @@ export function createSettingsRepo(db: Database) {
     listByPrefix(prefix: string): SettingRow[] {
       return listPrefixStmt.all(`${prefix}%`) as SettingRow[];
     },
-    /** Solo claves carta.* (RNF-24). */
     listPublicCarta(): SettingRow[] {
       return this.listByPrefix("carta.");
     },

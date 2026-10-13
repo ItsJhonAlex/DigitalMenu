@@ -1,9 +1,27 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Hono } from "hono";
 import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
 
+const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
+
 export function publicRoutes(ctx: AppContext) {
   const app = new Hono();
+
+  app.get("/img/:name", (c) => {
+    const name = c.req.param("name");
+    if (!IMG_RE.test(name)) return c.notFound();
+    const path = join(ctx.runtime.dataDir, "images", name);
+    if (!existsSync(path)) return c.notFound();
+    return new Response(Bun.file(path), {
+      headers: {
+        "Content-Type": "image/webp",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  });
 
   app.get("/api/health", (c) => {
     let dbOk = false;

@@ -6,6 +6,7 @@ import { createOffersRepo } from "./offers";
 import { createProductsRepo } from "./products";
 import { createSettingsRepo } from "./settings";
 import { createTranslationsRepo } from "./translations";
+import { createUiStringsRepo } from "./ui-strings";
 
 export function createRepos(db: Database) {
   return {
@@ -16,6 +17,7 @@ export function createRepos(db: Database) {
     offers: createOffersRepo(db),
     translations: createTranslationsRepo(db),
     settings: createSettingsRepo(db),
+    uiStrings: createUiStringsRepo(db),
   };
 }
 
@@ -29,4 +31,5 @@ export {
   createProductsRepo,
   createSettingsRepo,
   createTranslationsRepo,
+  createUiStringsRepo,
 };

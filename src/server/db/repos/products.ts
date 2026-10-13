@@ -7,6 +7,7 @@ export type ProductFilter = {
   available?: boolean;
   visible?: boolean;
   q?: string;
+  untranslated?: string;
 };
 
 export function createProductsRepo(db: Database) {
@@ -30,11 +31,26 @@ export function createProductsRepo(db: Database) {
      SET available = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
      WHERE id = ?`,
   );
+  const setVisibleStmt = db.prepare(
+    `UPDATE products
+     SET visible = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE id = ?`,
+  );
+  const setPriceStmt = db.prepare(
+    `UPDATE products
+     SET price_minor = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE id = ?`,
+  );
   const resetAllAvailableStmt = db.prepare(
     `UPDATE products SET available = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
   );
   const deleteStmt = db.prepare(`DELETE FROM products WHERE id = ?`);
-  const offerCountStmt = db.prepare(`SELECT COUNT(*) AS n FROM offer_items WHERE product_id = ?`);
+  const offerIdsStmt = db.prepare(
+    `SELECT offer_id AS id FROM offer_items WHERE product_id = ? ORDER BY offer_id`,
+  );
+  const maxSortStmt = db.prepare(
+    `SELECT COALESCE(MAX(sort_order), -10) AS m FROM products WHERE category_id = ?`,
+  );
   const setOrderStmt = db.prepare(
     `UPDATE products
      SET sort_order = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
@@ -44,6 +60,12 @@ export function createProductsRepo(db: Database) {
   return {
     get(id: number): ProductRow | null {
       return (getStmt.get(id) as ProductRow | null) ?? null;
+    },
+    offerIds(productId: number): number[] {
+      return (offerIdsStmt.all(productId) as Array<{ id: number }>).map((r) => r.id);
+    },
+    nextSortOrder(categoryId: number): number {
+      return (maxSortStmt.get(categoryId) as { m: number }).m + 10;
     },
     list(filter: ProductFilter = {}): ProductRow[] {
       const where: string[] = [];
@@ -74,6 +96,13 @@ export function createProductsRepo(db: Database) {
         const like = `%${filter.q.trim()}%`;
         params.push(like, like);
       }
+      if (filter.untranslated) {
+        where.push(`NOT EXISTS (
+          SELECT 1 FROM translations t
+          WHERE t.entity = 'product' AND t.entity_id = p.id AND t.lang = ?
+        )`);
+        params.push(filter.untranslated);
+      }
 
       const sql = `
         SELECT p.id, p.category_id, p.type, p.price_minor, p.image, p.available, p.visible,
@@ -100,7 +129,7 @@ export function createProductsRepo(db: Database) {
         input.image ?? null,
         input.available === false ? 0 : 1,
         input.visible === false ? 0 : 1,
-        input.sort_order ?? 0,
+        input.sort_order ?? this.nextSortOrder(input.category_id),
       );
       return Number(r.lastInsertRowid);
     },
@@ -129,19 +158,22 @@ export function createProductsRepo(db: Database) {
       return r.changes > 0;
     },
     setAvailable(id: number, available: boolean): boolean {
-      const r = setAvailableStmt.run(available ? 1 : 0, id);
-      return r.changes > 0;
+      return setAvailableStmt.run(available ? 1 : 0, id).changes > 0;
+    },
+    setVisible(id: number, visible: boolean): boolean {
+      return setVisibleStmt.run(visible ? 1 : 0, id).changes > 0;
+    },
+    setPrice(id: number, priceMinor: number): boolean {
+      return setPriceStmt.run(priceMinor, id).changes > 0;
     },
     resetAllAvailable(): number {
       return resetAllAvailableStmt.run().changes;
     },
-    /** RF-14: no borrar si está en ofertas. */
-    remove(id: number): void {
-      const n = (offerCountStmt.get(id) as { n: number }).n;
-      if (n > 0) {
-        throw new Error("No se puede eliminar: el producto forma parte de una oferta");
-      }
+    remove(id: number): { ok: true } | { ok: false; offers: number[] } {
+      const offers = this.offerIds(id);
+      if (offers.length > 0) return { ok: false, offers };
       deleteStmt.run(id);
+      return { ok: true };
     },
     reorder(ids: number[]): void {
       const tx = db.transaction((ordered: number[]) => {

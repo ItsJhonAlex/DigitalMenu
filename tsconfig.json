@@ -16,9 +16,8 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "rootDir": ".",
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": ["src/**/*", "src/types/**/*.d.ts", "scripts/**/*", "tests/**/*"],

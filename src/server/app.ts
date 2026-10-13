@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import type { RuntimeOptions } from "./config";
 import type { Repos } from "./db/repos";
+import { HttpError, errorJson } from "./http/errors";
 import type { Logger } from "./logger";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { adminRoutes } from "./routes/admin";
@@ -34,10 +35,13 @@ export function createApp(ctx: AppContext) {
     app.get("/admin/api.ts", async () => serveDevFile("src/admin/api.ts"));
   }
 
-  app.notFound((c) => c.text("Not Found", 404));
+  app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not Found" } }, 404));
   app.onError((err, c) => {
+    if (err instanceof HttpError) {
+      return c.json(errorJson(err), err.status as 400);
+    }
     ctx.log.error("Unhandled error", { message: err.message, stack: err.stack });
-    return c.json({ error: "internal", message: "Error interno" }, 500);
+    return c.json({ error: { code: "INTERNAL_ERROR", message: "Error interno" } }, 500);
   });
 
   return app;
