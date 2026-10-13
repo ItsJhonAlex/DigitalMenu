@@ -39,8 +39,52 @@ export function adminRoutes(ctx: AppContext) {
     return c.json({ error: { code: "INTERNAL_ERROR", message: "Error interno" } }, 500);
   });
 
-  app.get("/admin", (c) => c.html(adminPlaceholderHtml(ctx.runtime.version)));
+  app.get("/admin", async (c) => {
+    const file = Bun.file("src/admin/index.html");
+    if (await file.exists()) {
+      return new Response(file, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+    return c.html(adminPlaceholderHtml(ctx.runtime.version));
+  });
   app.get("/admin/", (c) => c.redirect("/admin"));
+
+  // Assets SPA (TS/CSS) — solo en --dev; en prod irán embebidos
+  if (ctx.runtime.dev) {
+    app.get("/admin/*", async (c) => {
+      const rel = c.req.path.replace(/^\/admin\//, "").replace(/\\/g, "/");
+      if (!rel || rel.includes("..")) return c.notFound();
+      if (!(rel.endsWith(".ts") || rel.endsWith(".css") || rel.endsWith(".js"))) {
+        return c.notFound();
+      }
+      const file = Bun.file(`src/admin/${rel}`);
+      if (!(await file.exists())) return c.notFound();
+      if (rel.endsWith(".ts")) {
+        let js = new Bun.Transpiler({ loader: "ts" }).transformSync(await file.text());
+        // El navegador exige extensión en imports ESM relativos
+        js = js.replace(
+          /(from\s*["'])(\.[^"']+)(["'])/g,
+          (_m, a: string, spec: string, b: string) =>
+            a + (/\.(ts|js|css|json)$/.test(spec) ? spec : `${spec}.ts`) + b,
+        );
+        return new Response(js, {
+          headers: {
+            "Content-Type": "text/javascript; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+      return new Response(file, {
+        headers: {
+          "Content-Type": rel.endsWith(".css")
+            ? "text/css; charset=utf-8"
+            : "text/javascript; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    });
+  }
 
   app.get("/api/admin/ping", (c) =>
     c.json({
@@ -85,26 +129,11 @@ function adminPlaceholderHtml(version: string): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Menú Digital — Admin</title>
+  <title>Avanzar In Time — Admin</title>
   <link rel="stylesheet" href="/admin/styles.css" />
 </head>
 <body>
-  <div class="layout">
-    <aside class="sidebar">
-      <strong>Menú Digital</strong>
-      <nav>
-        <a href="#/">Inicio</a>
-        <a href="#/productos">Productos</a>
-        <a href="#/ajustes">Ajustes</a>
-      </nav>
-    </aside>
-    <main>
-      <h1>Admin</h1>
-      <p class="muted">API admin activa · v${escapeHtml(version)}</p>
-      <p id="status">Cargando…</p>
-    </main>
-  </div>
-  <script type="module" src="/admin/main.ts"></script>
+  <p>Admin no embebido (falta src/admin/index.html). v${escapeHtml(version)}</p>
 </body>
 </html>`;
 }

@@ -11,7 +11,7 @@ INSERT INTO currencies (
   ('USD', 'Dólar EE. UU.', '$',   2, 0, 400, 'up',      0.5, 'before', 1, 1);
 
 INSERT INTO settings (key, value) VALUES
-  ('carta.restaurant_name', '"Mi Restaurante"'),
+  ('carta.restaurant_name', '"Avanzar In Time"'),
   ('carta.default_lang', '"es"'),
   ('carta.default_currency', '"CUP"'),
   ('carta.show_rate', 'true'),

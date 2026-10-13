@@ -3,19 +3,48 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Menú Digital — Admin</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>Avanzar In Time — Menú Digital Admin</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
   </head>
   <body>
-    <div class="layout">
-      <aside class="sidebar">
-        <strong>Menú Digital</strong>
+    <div id="app" class="app">
+      <aside class="sidebar" aria-label="Navegación">
+        <div class="sidebar__brand">
+          <div class="sidebar__mark" aria-hidden="true">A</div>
+          <div class="sidebar__titles">
+            <strong class="sidebar__name">Avanzar In Time</strong>
+            <span class="sidebar__tag">Menú Digital · Admin</span>
+          </div>
+        </div>
+        <nav class="sidebar__nav" id="nav"></nav>
+        <div class="sidebar__foot">
+          <div class="sidebar__status" id="sidebar-status">
+            <span class="dot dot--ok"></span>
+            <span id="sidebar-ip">…</span>
+          </div>
+        </div>
       </aside>
-      <main>
-        <h1>Admin</h1>
-        <p class="muted">Fuente estática (dev).</p>
-      </main>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar__left">
+            <h1 class="topbar__title" id="page-title">Inicio</h1>
+            <p class="topbar__sub" id="page-sub">Panel rápido del día</p>
+          </div>
+          <div class="topbar__right">
+            <span class="chip" id="net-chip" title="Estado de red">IP …</span>
+            <a class="btn btn--ghost" id="btn-carta" href="/" target="_blank" rel="noopener">Ver carta</a>
+          </div>
+        </header>
+
+        <div class="banner" id="banner" hidden></div>
+        <main class="content" id="content" tabindex="-1"></main>
+      </div>
     </div>
-    <script type="module" src="./main.ts"></script>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <div id="modal-root"></div>
+
+    <script type="module" src="/admin/main.ts"></script>
   </body>
 </html>

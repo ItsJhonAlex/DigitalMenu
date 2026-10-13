@@ -34,6 +34,13 @@ try {
 }
 
 const repos = createRepos(db);
+// Marca del restaurante (sustituye el placeholder del seed antiguo)
+{
+  const restaurantName = repos.settings.getJson<string | null>("carta.restaurant_name", null);
+  if (restaurantName === "Mi Restaurante") {
+    repos.settings.setJson("carta.restaurant_name", "Avanzar In Time");
+  }
+}
 const ctx = { runtime, log, startedAt, db, repos };
 const app = createApp(ctx);
 

@@ -24,15 +24,12 @@ export function createApp(ctx: AppContext) {
   app.route("/", publicRoutes(ctx));
   app.route("/", adminRoutes(ctx));
 
-  // En --dev: servir fuentes TS/CSS/HTML de carta y admin desde disco
+  // En --dev: carta estática; assets del Admin se sirven en routes/admin (localhost)
   if (ctx.runtime.dev) {
     app.get("/carta/*", async (c) => {
       const rel = c.req.path.replace(/^\/carta\//, "");
-      return serveDevFile(`src/carta/${rel}`);
+      return serveDevFile(`src/carta/${safeRel(rel)}`);
     });
-    app.get("/admin/main.ts", async () => serveDevFile("src/admin/main.ts"));
-    app.get("/admin/styles.css", async () => serveDevFile("src/admin/styles.css"));
-    app.get("/admin/api.ts", async () => serveDevFile("src/admin/api.ts"));
   }
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not Found" } }, 404));
@@ -47,6 +44,12 @@ export function createApp(ctx: AppContext) {
   return app;
 }
 
+function safeRel(rel: string): string {
+  const cleaned = rel.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!cleaned || cleaned.includes("..")) throw new HttpError(400, "VALIDATION_ERROR", "Ruta inválida");
+  return cleaned;
+}
+
 async function serveDevFile(relPath: string): Promise<Response> {
   const file = Bun.file(relPath);
   if (!(await file.exists())) {
@@ -56,7 +59,12 @@ async function serveDevFile(relPath: string): Promise<Response> {
   // El navegador no ejecuta TS: transpilar al vuelo en --dev
   if (relPath.endsWith(".ts")) {
     const source = await file.text();
-    const js = new Bun.Transpiler({ loader: "ts" }).transformSync(source);
+    let js = new Bun.Transpiler({ loader: "ts" }).transformSync(source);
+    js = js.replace(
+      /(from\s*["'])(\.[^"']+)(["'])/g,
+      (_m, a: string, spec: string, b: string) =>
+        a + (/\.(ts|js|css|json)$/.test(spec) ? spec : `${spec}.ts`) + b,
+    );
     return new Response(js, {
       headers: {
         "Content-Type": "text/javascript; charset=utf-8",
