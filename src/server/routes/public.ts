@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
+import { hasEmbeddedAssets, serveEmbedded } from "../assets";
 import { createMenuService } from "../services/menu";
 
 const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
@@ -62,6 +63,10 @@ export function publicRoutes(ctx: AppContext) {
   });
 
   const serveCartaHtml = async () => {
+    if (!ctx.runtime.dev && hasEmbeddedAssets()) {
+      const embedded = serveEmbedded("/");
+      if (embedded) return embedded;
+    }
     const file = Bun.file("src/carta/index.html");
     if (await file.exists()) {
       return new Response(file, {
@@ -80,6 +85,14 @@ export function publicRoutes(ctx: AppContext) {
     if (!Number.isFinite(id) || id <= 0) return c.notFound();
     return serveCartaHtml();
   });
+
+  if (!ctx.runtime.dev) {
+    app.get("/carta/*", (c) => {
+      const embedded = serveEmbedded(c.req.path);
+      if (embedded) return embedded;
+      return c.notFound();
+    });
+  }
 
   return app;
 }

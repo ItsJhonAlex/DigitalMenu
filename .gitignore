@@ -5,6 +5,7 @@ dist/
 
 # Datos de desarrollo / POS (nunca en git)
 data/
+data-build-smoke/
 scripts/tmp-img/
 scripts/tmp-img/
 .env

@@ -1,0 +1,155 @@
+# Release: compila MenuDigital.exe (+ debug) y publica GitHub Release al pushear un tag v*.*.*
+# Ejemplo: git tag v1.0.0 && git push origin v1.0.0
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de versión (ej. v1.0.0). Si no existe, se crea en este commit."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Release Windows baseline
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolver versión desde tag
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*.*.*) ;;
+            *)
+              echo "Tag inválido: '$TAG' (esperado vMAJOR.MINOR.PATCH)"
+              exit 1
+              ;;
+          esac
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release $TAG (version=$VERSION)"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Instalar dependencias
+        run: bun install --frozen-lockfile
+
+      - name: Sincronizar package.json con el tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          bun -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json','utf8'));
+            p.version = process.env.VERSION;
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+
+      - name: Tests
+        run: bun test
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build .exe (baseline)
+        run: bun run build
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+
+      - name: Preparar artefactos con versión
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          mkdir -p release-assets
+          cp dist/MenuDigital.exe "release-assets/MenuDigital-${TAG}.exe"
+          cp dist/MenuDigital-debug.exe "release-assets/MenuDigital-debug-${TAG}.exe"
+          # Nombres cortos (instalación / update.ps1)
+          cp dist/MenuDigital.exe release-assets/MenuDigital.exe
+          cp dist/MenuDigital-debug.exe release-assets/MenuDigital-debug.exe
+          (
+            cd release-assets
+            sha256sum "MenuDigital-${TAG}.exe" "MenuDigital-debug-${TAG}.exe" \
+              MenuDigital.exe MenuDigital-debug.exe > SHA256SUMS.txt
+          )
+          ls -la release-assets
+
+      - name: Crear tag si es workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG ya existe"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: DigitalMenu ${{ steps.ver.outputs.tag }}
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          generate_release_notes: true
+          body: |
+            ## DigitalMenu ${{ steps.ver.outputs.tag }}
+
+            Ejecutables Windows **x64 baseline** (CPU sin AVX2, p. ej. i3-3110M del POS).
+
+            | Archivo | Uso |
+            |---------|-----|
+            | `MenuDigital.exe` | Producción (sin consola) |
+            | `MenuDigital-debug.exe` | Diagnóstico (consola visible) |
+            | `MenuDigital-${{ steps.ver.outputs.tag }}.exe` | Mismo binario, nombre versionado |
+            | `MenuDigital-debug-${{ steps.ver.outputs.tag }}.exe` | Debug versionado |
+            | `SHA256SUMS.txt` | Checksums |
+
+            **Instalación / actualización:** copiar solo el `.exe` a `C:\MenuDigital\` (no tocar `data\`).
+
+            Target: `bun-windows-x64-baseline` · Bun 1.4.3
+          files: |
+            release-assets/MenuDigital.exe
+            release-assets/MenuDigital-debug.exe
+            release-assets/MenuDigital-${{ steps.ver.outputs.tag }}.exe
+            release-assets/MenuDigital-debug-${{ steps.ver.outputs.tag }}.exe
+            release-assets/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

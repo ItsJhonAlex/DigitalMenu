@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../../app";
+import { hasEmbeddedAssets, serveEmbedded } from "../../assets";
 import { HttpError, errorJson } from "../../http/errors";
 import { adminPin } from "../../middleware/adminPin";
 import { localOnly } from "../../middleware/localOnly";
@@ -40,6 +41,10 @@ export function adminRoutes(ctx: AppContext) {
   });
 
   app.get("/admin", async (c) => {
+    if (!ctx.runtime.dev && hasEmbeddedAssets()) {
+      const embedded = serveEmbedded("/admin");
+      if (embedded) return embedded;
+    }
     const file = Bun.file("src/admin/index.html");
     if (await file.exists()) {
       return new Response(file, {
@@ -50,7 +55,7 @@ export function adminRoutes(ctx: AppContext) {
   });
   app.get("/admin/", (c) => c.redirect("/admin"));
 
-  // Assets SPA (TS/CSS) — solo en --dev; en prod irán embebidos
+  // Assets SPA: --dev transpila TS; prod sirve embebidos (hashed)
   if (ctx.runtime.dev) {
     app.get("/admin/*", async (c) => {
       const rel = c.req.path.replace(/^\/admin\//, "").replace(/\\/g, "/");
@@ -83,6 +88,12 @@ export function adminRoutes(ctx: AppContext) {
           "Cache-Control": "no-store",
         },
       });
+    });
+  } else {
+    app.get("/admin/*", (c) => {
+      const embedded = serveEmbedded(c.req.path);
+      if (embedded) return embedded;
+      return c.notFound();
     });
   }
 
