@@ -3,11 +3,13 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
+import { createMenuService } from "../services/menu";
 
 const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
 
 export function publicRoutes(ctx: AppContext) {
   const app = new Hono();
+  const menu = createMenuService({ db: ctx.db, repos: ctx.repos });
 
   app.get("/img/:name", (c) => {
     const name = c.req.param("name");
@@ -41,51 +43,47 @@ export function publicRoutes(ctx: AppContext) {
     return c.json(body);
   });
 
-  app.get("/", (c) => {
-    return c.html(cartaPlaceholderHtml(ctx.runtime.version));
+  app.get("/api/menu", (c) => {
+    const lang = c.req.query("lang") ?? undefined;
+    const { body, etag } = menu.get(lang);
+    const inm = c.req.header("if-none-match");
+    if (inm && inm === etag) {
+      return c.body(null, 304, {
+        ETag: etag,
+        "Cache-Control": "no-cache",
+        "Content-Language": body.lang,
+      });
+    }
+    return c.json(body, 200, {
+      ETag: etag,
+      "Cache-Control": "no-cache",
+      "Content-Language": body.lang,
+    });
   });
 
-  app.get("/api/menu", (c) => {
-    // Stub hasta F3 / services/menu.ts
-    return c.json({
-      version: 0,
-      languages: ["es", "en"],
-      currencies: [],
-      categories: [],
-      products: [],
-      offers: [],
-      message: "Menú aún no implementado (esqueleto F0/F1)",
+  const serveCartaHtml = async () => {
+    const file = Bun.file("src/carta/index.html");
+    if (await file.exists()) {
+      return new Response(file, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+    return new Response(cartaFallbackHtml(ctx.runtime.version), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
     });
+  };
+
+  app.get("/", () => serveCartaHtml());
+  // Deep link del detalle de producto (History API)
+  app.get("/p/:id", (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isFinite(id) || id <= 0) return c.notFound();
+    return serveCartaHtml();
   });
 
   return app;
 }
 
-function cartaPlaceholderHtml(version: string): string {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Menú Digital</title>
-  <link rel="stylesheet" href="/carta/styles.css" />
-</head>
-<body>
-  <main class="shell">
-    <p class="brand">DigitalMenu</p>
-    <h1>Carta</h1>
-    <p class="muted">Esqueleto de desarrollo · v${escapeHtml(version)}</p>
-    <p><a href="/admin">Admin</a> · <a href="/api/health">/api/health</a></p>
-  </main>
-  <script type="module" src="/carta/main.ts"></script>
-</body>
-</html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function cartaFallbackHtml(version: string): string {
+  return `<!DOCTYPE html><html lang="es"><body><p>Carta no encontrada (v${version})</p></body></html>`;
 }

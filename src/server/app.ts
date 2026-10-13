@@ -24,11 +24,15 @@ export function createApp(ctx: AppContext) {
   app.route("/", publicRoutes(ctx));
   app.route("/", adminRoutes(ctx));
 
-  // En --dev: carta estática; assets del Admin se sirven en routes/admin (localhost)
+  // En --dev: assets TS/CSS de Carta y shared (Admin también en routes/admin)
   if (ctx.runtime.dev) {
     app.get("/carta/*", async (c) => {
       const rel = c.req.path.replace(/^\/carta\//, "");
       return serveDevFile(`src/carta/${safeRel(rel)}`);
+    });
+    app.get("/shared/*", async (c) => {
+      const rel = c.req.path.replace(/^\/shared\//, "");
+      return serveDevFile(`src/shared/${safeRel(rel)}`);
     });
   }
 
@@ -46,7 +50,8 @@ export function createApp(ctx: AppContext) {
 
 function safeRel(rel: string): string {
   const cleaned = rel.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!cleaned || cleaned.includes("..")) throw new HttpError(400, "VALIDATION_ERROR", "Ruta inválida");
+  if (!cleaned || cleaned.includes(".."))
+    throw new HttpError(400, "VALIDATION_ERROR", "Ruta inválida");
   return cleaned;
 }
 

@@ -1,4 +1,4 @@
-/** Tipos compartidos de la API (request/response). Se irán ampliando con docs/07. */
+/** Tipos compartidos de la API (request/response). */
 
 export type HealthResponse = {
   app: "DigitalMenu";
@@ -8,20 +8,85 @@ export type HealthResponse = {
   db?: boolean;
 };
 
-export type ApiError = {
-  error: string;
-  message: string;
-  details?: unknown;
+export type ApiErrorBody = {
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
 };
+
+export type Lang = string;
+export type ProductType = "comida" | "bebida" | "articulo";
 
 export type CurrencyDto = {
   code: string;
-  name: string;
   symbol: string;
   decimals: number;
-  isBase: boolean;
   basePerUnit: number;
   rounding: "none" | "up" | "nearest";
   roundStep: number | null;
   symbolPosition: "before" | "after";
+  isBase: boolean;
+  rateUpdatedAt?: string | null;
+  name?: string;
+  active?: boolean;
+  sortOrder?: number;
+};
+
+export type MenuImage = { thumb: string; large: string } | null;
+
+export type MenuProduct = {
+  id: number;
+  type: ProductType;
+  name: string;
+  description: string | null;
+  priceMinor: number;
+  available: boolean;
+  image: MenuImage;
+  fallback: boolean;
+};
+
+export type MenuOffer = {
+  id: number;
+  name: string;
+  description: string | null;
+  priceMinor: number;
+  regularMinor: number | null;
+  showSavings: boolean;
+  available: boolean;
+  image: MenuImage;
+  items: Array<{ productId: number; name: string; quantity: number }>;
+  fallback: boolean;
+};
+
+export type MenuCategory = {
+  id: number;
+  name: string;
+  description: string | null;
+  fallback: boolean;
+  products: MenuProduct[];
+};
+
+export type MenuResponse = {
+  version: number;
+  lang: Lang;
+  requestedLang: Lang | null;
+  languages: Array<{ code: Lang; nativeName: string }>;
+  currency: {
+    base: string;
+    default: string;
+    second: string | null;
+    showRate: boolean;
+    list: CurrencyDto[];
+  };
+  restaurant: {
+    name: string;
+    logo: string | null;
+    welcome: string | null;
+    footer: string | null;
+  };
+  ui: Record<string, string>;
+  offers: MenuOffer[];
+  categories: MenuCategory[];
 };
