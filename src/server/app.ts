@@ -1,0 +1,83 @@
+import type { Database } from "bun:sqlite";
+import { Hono } from "hono";
+import type { RuntimeOptions } from "./config";
+import type { Repos } from "./db/repos";
+import type { Logger } from "./logger";
+import { securityHeaders } from "./middleware/securityHeaders";
+import { adminRoutes } from "./routes/admin";
+import { publicRoutes } from "./routes/public";
+
+export type AppContext = {
+  runtime: RuntimeOptions;
+  log: Logger;
+  startedAt: number;
+  db: Database;
+  repos: Repos;
+};
+
+export function createApp(ctx: AppContext) {
+  const app = new Hono();
+
+  app.use("*", securityHeaders());
+
+  app.route("/", publicRoutes(ctx));
+  app.route("/", adminRoutes(ctx));
+
+  // En --dev: servir fuentes TS/CSS/HTML de carta y admin desde disco
+  if (ctx.runtime.dev) {
+    app.get("/carta/*", async (c) => {
+      const rel = c.req.path.replace(/^\/carta\//, "");
+      return serveDevFile(`src/carta/${rel}`);
+    });
+    app.get("/admin/main.ts", async () => serveDevFile("src/admin/main.ts"));
+    app.get("/admin/styles.css", async () => serveDevFile("src/admin/styles.css"));
+    app.get("/admin/api.ts", async () => serveDevFile("src/admin/api.ts"));
+  }
+
+  app.notFound((c) => c.text("Not Found", 404));
+  app.onError((err, c) => {
+    ctx.log.error("Unhandled error", { message: err.message, stack: err.stack });
+    return c.json({ error: "internal", message: "Error interno" }, 500);
+  });
+
+  return app;
+}
+
+async function serveDevFile(relPath: string): Promise<Response> {
+  const file = Bun.file(relPath);
+  if (!(await file.exists())) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  // El navegador no ejecuta TS: transpilar al vuelo en --dev
+  if (relPath.endsWith(".ts")) {
+    const source = await file.text();
+    const js = new Bun.Transpiler({ loader: "ts" }).transformSync(source);
+    return new Response(js, {
+      headers: {
+        "Content-Type": "text/javascript; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  const type = contentType(relPath);
+  return new Response(file, {
+    headers: {
+      "Content-Type": type,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+function contentType(path: string): string {
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".js") || path.endsWith(".ts") || path.endsWith(".mjs")) {
+    return "text/javascript; charset=utf-8";
+  }
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".json")) return "application/json; charset=utf-8";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".webp")) return "image/webp";
+  return "application/octet-stream";
+}

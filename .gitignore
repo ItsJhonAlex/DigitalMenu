@@ -1,0 +1,30 @@
+# Dependencias y salidas
+node_modules/
+dist/
+*.exe
+
+# Datos de desarrollo / POS (nunca en git)
+data/
+.env
+.env.*
+!.env.example
+
+# Logs y temporales
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Generados
+src/server/assets.generated.ts
+design/
+
+# Lockfiles ajenos (solo bun.lock)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

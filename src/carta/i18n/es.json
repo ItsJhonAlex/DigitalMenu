@@ -1,0 +1,8 @@
+{
+  "app.title": "Carta",
+  "lang.label": "Idioma",
+  "currency.label": "Moneda",
+  "soldOut": "Agotado",
+  "offers": "Ofertas",
+  "empty": "La carta aún no tiene productos."
+}

@@ -1,0 +1,27 @@
+{
+  "name": "digitalmenu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Carta digital local para restaurante (sin internet) — AvanzaInTime",
+  "scripts": {
+    "dev": "bun --watch src/server/main.ts --data ./data --dev",
+    "start": "bun src/server/main.ts --data ./data",
+    "build:web": "bun build src/carta/main.ts src/admin/main.ts --outdir dist/web --minify --target browser --entry-naming [dir]/[name]-[hash].[ext]",
+    "build": "bun scripts/build.ts",
+    "test": "bun test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "hono": "^4.9.8",
+    "qrcode-generator": "^1.4.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
+}
