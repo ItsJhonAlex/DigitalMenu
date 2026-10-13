@@ -49,7 +49,11 @@ async function compile(outfile: string, hideConsole: boolean): Promise<void> {
     "--outfile",
     outfile,
   ];
-  console.log(hideConsole ? "Compilando MenuDigital.exe (sin consola)…" : "Compilando MenuDigital-debug.exe (con consola)…");
+  console.log(
+    hideConsole
+      ? "Compilando MenuDigital.exe (sin consola)…"
+      : "Compilando MenuDigital-debug.exe (con consola)…",
+  );
   const proc = Bun.spawn(["bun", ...args], { stdout: "inherit", stderr: "inherit", cwd: ROOT });
   const code = await proc.exited;
   if (code !== 0) throw new Error(`bun build falló (${code}) para ${outfile}`);

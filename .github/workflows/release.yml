@@ -88,23 +88,27 @@ jobs:
           APP_VERSION: ${{ steps.ver.outputs.version }}
 
       - name: Preparar artefactos con versión
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          V="${{ steps.ver.outputs.version }}"
-          TAG="${{ steps.ver.outputs.tag }}"
-          mkdir -p release-assets
-          cp dist/MenuDigital.exe "release-assets/MenuDigital-${TAG}.exe"
-          cp dist/MenuDigital-debug.exe "release-assets/MenuDigital-debug-${TAG}.exe"
-          # Nombres cortos (instalación / update.ps1)
-          cp dist/MenuDigital.exe release-assets/MenuDigital.exe
-          cp dist/MenuDigital-debug.exe release-assets/MenuDigital-debug.exe
-          (
-            cd release-assets
-            sha256sum "MenuDigital-${TAG}.exe" "MenuDigital-debug-${TAG}.exe" \
-              MenuDigital.exe MenuDigital-debug.exe > SHA256SUMS.txt
+          $ErrorActionPreference = "Stop"
+          $TAG = "${{ steps.ver.outputs.tag }}"
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item dist/MenuDigital.exe "release-assets/MenuDigital-$TAG.exe"
+          Copy-Item dist/MenuDigital-debug.exe "release-assets/MenuDigital-debug-$TAG.exe"
+          Copy-Item dist/MenuDigital.exe release-assets/MenuDigital.exe
+          Copy-Item dist/MenuDigital-debug.exe release-assets/MenuDigital-debug.exe
+          $files = @(
+            "MenuDigital-$TAG.exe",
+            "MenuDigital-debug-$TAG.exe",
+            "MenuDigital.exe",
+            "MenuDigital-debug.exe"
           )
-          ls -la release-assets
+          $lines = foreach ($f in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 "release-assets/$f").Hash.ToLowerInvariant()
+            "$hash  $f"
+          }
+          $lines | Set-Content -Encoding utf8 release-assets/SHA256SUMS.txt
+          Get-ChildItem release-assets | Format-Table Name, Length
 
       - name: Crear tag si es workflow_dispatch
         if: github.event_name == 'workflow_dispatch'
