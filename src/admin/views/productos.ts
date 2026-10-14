@@ -4,6 +4,7 @@ import { type Category, type Currency, type I18nMap, type Product, api } from ".
 import { clear, el, nameOf } from "../dom";
 import { uploadProductImage } from "../image-compress";
 import { openModal } from "../modal";
+import { enablePointerSort, nudgeRow, sortableControls } from "../sortable";
 import { showToast } from "../toast";
 
 function toMoney(c: Currency): MoneyCurrency {
@@ -106,8 +107,15 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     }),
   );
 
+  const hint = el("p", { className: "muted tiny" });
+  wrap.appendChild(hint);
+
   const tableWrap = el("div", { className: "table-wrap" });
+  let sortCleanup: { destroy: () => void } | null = null;
+
   const paintTable = () => {
+    sortCleanup?.destroy();
+    sortCleanup = null;
     clear(tableWrap);
     let items = products.items;
     const query = q.value.trim().toLowerCase();
@@ -117,19 +125,58 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     if (statusFilter.value === "available") items = items.filter((p) => p.available);
     if (statusFilter.value === "soldout") items = items.filter((p) => !p.available);
 
+    // RF-17: reordenar solo con una categoría y sin otros filtros (lista completa)
+    const canReorder =
+      Boolean(catFilter.value) && !query && !typeFilter.value && !statusFilter.value;
+    hint.textContent = canReorder
+      ? "Arrastre ⠿ con el dedo o use ↑/↓. El orden se guarda al soltar (actualiza la carta)."
+      : "Para reordenar, elija una sola categoría y quite búsqueda/tipo/estado.";
+
     const table = el("table", { className: "data" });
     table.appendChild(
       el("thead", {
         children: [
           el("tr", {
-            children: ["", "Nombre", "Categoría", "Tipo", "Precio", "Disp.", "Acciones"].map((t) =>
-              el("th", { text: t }),
-            ),
+            children: [
+              ...(canReorder ? [""] : []),
+              "",
+              "Nombre",
+              "Categoría",
+              "Tipo",
+              "Precio",
+              "Disp.",
+              "Acciones",
+            ].map((t) => el("th", { text: t })),
           }),
         ],
       }),
     );
     const tbody = el("tbody");
+
+    const categoryId = Number(catFilter.value);
+    const saveOrder = async (ids: number[]) => {
+      try {
+        await api.put(`/api/admin/categories/${categoryId}/products/order`, { ids });
+        // Mantener orden local para no saltar al repintar
+        const rank = new Map(ids.map((id, i) => [id, i]));
+        products.items.sort((a, b) => {
+          const ra = rank.get(a.id);
+          const rb = rank.get(b.id);
+          if (ra != null && rb != null) return ra - rb;
+          if (a.categoryId !== b.categoryId) return a.categoryId - b.categoryId;
+          return a.sortOrder - b.sortOrder;
+        });
+        for (const p of products.items) {
+          const r = rank.get(p.id);
+          if (r != null) p.sortOrder = r * 10;
+        }
+        showToast("Orden guardado", "success");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Error al ordenar", "error");
+        await renderProductos(root);
+      }
+    };
+
     for (const p of items) {
       const thumb = el("div", { className: "prod-thumb" });
       if (p.image) {
@@ -178,21 +225,38 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
-      tbody.appendChild(
-        el("tr", {
-          children: [
-            el("td", { children: [thumb] }),
-            el("td", { text: nameOf(p.i18n) }),
-            el("td", { text: catName.get(p.categoryId) ?? "—" }),
-            el("td", { text: typeLabel(p.type) }),
-            el("td", { text: `${p.priceMinor} ${baseCode}` }),
-            el("td", { children: [toggle] }),
-            el("td", { children: [el("div", { className: "row", children: [edit, del] })] }),
-          ],
-        }),
+
+      const cells: HTMLElement[] = [];
+      if (canReorder) {
+        cells.push(el("td", { className: "sortable-cell" }));
+      }
+      cells.push(
+        el("td", { children: [thumb] }),
+        el("td", { text: nameOf(p.i18n) }),
+        el("td", { text: catName.get(p.categoryId) ?? "—" }),
+        el("td", { text: typeLabel(p.type) }),
+        el("td", { text: `${p.priceMinor} ${baseCode}` }),
+        el("td", { children: [toggle] }),
+        el("td", { children: [el("div", { className: "row", children: [edit, del] })] }),
       );
+
+      const tr = el("tr", {
+        attrs: canReorder ? { "data-id": String(p.id) } : {},
+        children: cells,
+      });
+      if (canReorder) {
+        const controls = sortableControls({
+          onUp: () => void nudgeRow(tbody, tr, -1, saveOrder),
+          onDown: () => void nudgeRow(tbody, tr, 1, saveOrder),
+        });
+        tr.querySelector(".sortable-cell")!.appendChild(controls.root);
+      }
+      tbody.appendChild(tr);
     }
     table.appendChild(tbody);
+    if (canReorder) {
+      sortCleanup = enablePointerSort(tbody, { onReorder: saveOrder });
+    }
     tableWrap.appendChild(table);
   };
   q.addEventListener("input", paintTable);

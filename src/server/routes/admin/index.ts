@@ -6,6 +6,7 @@ import { adminPin } from "../../middleware/adminPin";
 import { localOnly } from "../../middleware/localOnly";
 import { requireJsonWrites } from "../../middleware/requireJson";
 import { backupsAdmin } from "./backups";
+import { catalogIoAdmin } from "./catalog-io";
 import { categoriesAdmin } from "./categories";
 import { currenciesAdmin } from "./currencies";
 import { diagnosticsAdmin } from "./diagnostics";
@@ -35,7 +36,9 @@ export function adminRoutes(ctx: AppContext) {
       c.res.status < 400
     ) {
       // Cada escritura del admin invalida caché/ETag de /api/menu
-      ctx.repos.settings.bumpMenuRevision();
+      const rev = ctx.repos.settings.bumpMenuRevision();
+      // Aviso SSE a las cartas abiertas (M1)
+      ctx.menuEvents.publishRevision(rev);
     }
   });
 
@@ -139,6 +142,7 @@ export function adminRoutes(ctx: AppContext) {
   app.route("/", imagesAdmin(ctx));
   app.route("/", networkAdmin(ctx));
   app.route("/", backupsAdmin(ctx));
+  app.route("/", catalogIoAdmin(ctx));
   app.route("/", diagnosticsAdmin(ctx));
 
   return app;

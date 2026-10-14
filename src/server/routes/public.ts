@@ -5,12 +5,16 @@ import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
 import { hasEmbeddedAssets, serveEmbedded } from "../assets";
 import { createMenuService } from "../services/menu";
+import {
+  MENU_EVENTS_MAX_CLIENTS,
+  menuEventsResponse,
+} from "../services/menu-events";
 
 const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
 
 export function publicRoutes(ctx: AppContext) {
   const app = new Hono();
-  const menu = createMenuService({ repos: ctx.repos });
+  const menu = createMenuService({ getRepos: () => ctx.repos });
 
   app.get("/img/:name", (c) => {
     const name = c.req.param("name");
@@ -60,6 +64,22 @@ export function publicRoutes(ctx: AppContext) {
       "Cache-Control": "no-cache",
       "Content-Language": body.lang,
     });
+  });
+
+  /** SSE: revisión del menú en vivo (M1). Latido 25 s; tope de clientes. */
+  app.get("/api/menu/events", (c) => {
+    if (ctx.menuEvents.clientCount() >= MENU_EVENTS_MAX_CLIENTS) {
+      return c.json(
+        {
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: `Demasiadas conexiones en vivo (máx. ${MENU_EVENTS_MAX_CLIENTS})`,
+          },
+        },
+        503,
+      );
+    }
+    return menuEventsResponse(ctx.menuEvents, () => ctx.repos.settings.getMenuRevision());
   });
 
   const serveCartaHtml = async () => {

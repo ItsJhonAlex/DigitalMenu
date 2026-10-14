@@ -4,6 +4,7 @@ import { clear, el } from "./dom";
 import { showToast } from "./toast";
 import { renderAjustes } from "./views/ajustes";
 import { renderCategorias } from "./views/categorias";
+import { renderEstado } from "./views/estado";
 import { renderIdiomas } from "./views/idiomas";
 import { renderInicio } from "./views/inicio";
 import { renderMonedas } from "./views/monedas";
@@ -84,6 +85,15 @@ const routes: Route[] = [
     title: "Red y QR",
     sub: "Wi‑Fi, IP y tarjeta imprimible",
     render: renderRedQr,
+  },
+  {
+    id: "estado",
+    path: "/estado",
+    label: "Estado",
+    icon: "◉",
+    title: "Estado del sistema",
+    sub: "Móviles, memoria, IP, copias y avisos",
+    render: renderEstado,
   },
   {
     id: "ajustes",

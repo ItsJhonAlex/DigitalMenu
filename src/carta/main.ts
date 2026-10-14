@@ -67,6 +67,89 @@ async function fetchMenu(lang: string): Promise<MenuResponse> {
   return (await res.json()) as MenuResponse;
 }
 
+/** Recarga sin “flash”: conserva categoría activa y scroll. */
+async function softReload(): Promise<void> {
+  if (!menu) {
+    await load();
+    return;
+  }
+  const lang = menu.lang;
+  const keepCat = activeCat;
+  const scrollY = window.scrollY;
+  try {
+    const next = await fetchMenu(lang);
+    if (next.version === menu.version) return;
+    menu = next;
+    const codes = menu.currency.list.map((c) => c.code);
+    if (!codes.includes(currencyCode)) {
+      currencyCode =
+        (codes.includes(menu.currency.default) ? menu.currency.default : codes[0]!) || "CUP";
+    }
+    activeCat = keepCat;
+    paint();
+    // Restaurar categoría / scroll tras el pintado
+    requestAnimationFrame(() => {
+      activeCat = keepCat;
+      paintNav();
+      const target = document.getElementById(keepCat === "offers" ? "sec-offers" : keepCat);
+      if (target) {
+        const top = target.getBoundingClientRect().top + window.scrollY;
+        const header = document.getElementById("top");
+        const offset = header ? header.getBoundingClientRect().height + 8 : 0;
+        window.scrollTo(0, Math.max(0, top - offset));
+      } else {
+        window.scrollTo(0, scrollY);
+      }
+      syncDetailFromUrl();
+    });
+  } catch {
+    // Mantener carta actual si falla el refetch
+  }
+}
+
+/** SSE /api/menu/events — reintento con espera creciente. */
+function watchMenuEvents(): void {
+  let delayMs = 1_000;
+  let knownRev: number | null = null;
+  let es: EventSource | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(connect, delayMs);
+    delayMs = Math.min(delayMs * 2, 30_000);
+  };
+
+  const connect = () => {
+    es?.close();
+    es = new EventSource("/api/menu/events");
+    es.addEventListener("revision", (ev) => {
+      delayMs = 1_000;
+      try {
+        const data = JSON.parse((ev as MessageEvent).data) as { revision?: number };
+        const rev = data.revision;
+        if (typeof rev !== "number") return;
+        if (knownRev != null && rev !== knownRev) {
+          void softReload();
+        }
+        knownRev = rev;
+      } catch {
+        // ignore payload raro
+      }
+    });
+    es.onopen = () => {
+      delayMs = 1_000;
+    };
+    es.onerror = () => {
+      es?.close();
+      es = null;
+      schedule();
+    };
+  };
+
+  connect();
+}
+
 function paintControls(): void {
   if (!menu) return;
   const langSeg = document.getElementById("lang-seg");
@@ -271,9 +354,9 @@ window.addEventListener("resize", () => syncStickyOffset());
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && detailRoot) closeDetail();
 });
-// Al volver a la pestaña (p. ej. tras cambiar ajustes en Admin), refrescar carta
+// Al volver a la pestaña: refetch suave (SSE cubre el caso normal)
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") void load(menu?.lang);
+  if (document.visibilityState === "visible") void softReload();
 });
 
-void load();
+void load().then(() => watchMenuEvents());

@@ -12,6 +12,7 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
       uptimeSec: number;
       memory: { rssMB: number };
       version: string;
+      menuEvents?: { clients: number };
     }>("/api/admin/diagnostics"),
     api.get<{
       cartaUrl: string | null;
@@ -85,7 +86,8 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
   }
   grid.appendChild(ratesCard);
 
-  // Estado
+  // Estado (resumen; detalle en vivo → #/estado)
+  const sseClients = diag.menuEvents?.clients;
   const statusCard = el("section", { className: "card stack" });
   statusCard.appendChild(el("h2", { className: "card__title", text: "Estado del sistema" }));
   statusCard.append(
@@ -96,20 +98,22 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
     }),
     el("p", {
       className: "muted tiny",
-      text: `v${diag.version} · RAM ${diag.memory.rssMB} MB · uptime ${Math.floor(diag.uptimeSec / 60)} min`,
+      text: `v${diag.version} · RAM ${diag.memory.rssMB} MB · ${Math.floor(diag.uptimeSec / 60)} min encendida${
+        sseClients != null ? ` · ${sseClients} móvil(es)` : ""
+      }`,
     }),
     el("div", {
       className: "row",
       children: [
         el("a", {
           className: "btn btn--primary btn--sm",
-          text: "Red y QR",
-          attrs: { href: "#/red" },
+          text: "Estado en vivo",
+          attrs: { href: "#/estado" },
         }),
         el("a", {
           className: "btn btn--ghost btn--sm",
-          text: "Nuevo producto",
-          attrs: { href: "#/productos" },
+          text: "Red y QR",
+          attrs: { href: "#/red" },
         }),
       ],
     }),

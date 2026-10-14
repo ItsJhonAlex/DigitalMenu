@@ -1,6 +1,7 @@
 import { type Category, type I18nMap, api } from "../api";
 import { clear, el, nameOf } from "../dom";
 import { openModal } from "../modal";
+import { enablePointerSort, nudgeRow, sortableControls } from "../sortable";
 import { showToast } from "../toast";
 
 function i18nForm(initial: I18nMap = { es: { name: "" } }): {
@@ -102,12 +103,19 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
   newBtn.addEventListener("click", () => openCategoryModal(null, refresh));
   wrap.appendChild(toolbar);
 
+  wrap.appendChild(
+    el("p", {
+      className: "muted tiny",
+      text: "Arrastre ⠿ con el dedo o use ↑/↓ para ordenar. El orden se guarda al soltar.",
+    }),
+  );
+
   const table = el("table", { className: "data" });
   table.appendChild(
     el("thead", {
       children: [
         el("tr", {
-          children: ["Nombre", "EN", "Productos", "Visible", "Acciones"].map((t) =>
+          children: ["", "Nombre", "EN", "Productos", "Visible", "Acciones"].map((t) =>
             el("th", { text: t }),
           ),
         }),
@@ -115,6 +123,17 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
     }),
   );
   const tbody = el("tbody");
+
+  const saveOrder = async (ids: number[]) => {
+    try {
+      await api.put("/api/admin/categories/order", { ids });
+      showToast("Orden guardado", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Error al ordenar", "error");
+      await refresh();
+    }
+  };
+
   for (const cat of items) {
     const visible = el("input", {
       className: "toggle",
@@ -158,19 +177,26 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
       }
     });
 
-    tbody.appendChild(
-      el("tr", {
-        children: [
-          el("td", { text: nameOf(cat.i18n) }),
-          el("td", { text: cat.i18n.en?.name ? "✔" : "✖" }),
-          el("td", { text: String(cat.productCount) }),
-          el("td", { children: [visible] }),
-          el("td", { children: [el("div", { className: "row", children: [edit, del] })] }),
-        ],
-      }),
-    );
+    const tr = el("tr", {
+      attrs: { "data-id": String(cat.id) },
+      children: [
+        el("td", { className: "sortable-cell" }),
+        el("td", { text: nameOf(cat.i18n) }),
+        el("td", { text: cat.i18n.en?.name ? "✔" : "✖" }),
+        el("td", { text: String(cat.productCount) }),
+        el("td", { children: [visible] }),
+        el("td", { children: [el("div", { className: "row", children: [edit, del] })] }),
+      ],
+    });
+    const controls = sortableControls({
+      onUp: () => void nudgeRow(tbody, tr, -1, saveOrder),
+      onDown: () => void nudgeRow(tbody, tr, 1, saveOrder),
+    });
+    tr.querySelector(".sortable-cell")!.appendChild(controls.root);
+    tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+  enablePointerSort(tbody, { onReorder: saveOrder });
   wrap.appendChild(el("div", { className: "table-wrap", children: [table] }));
   return wrap;
 }

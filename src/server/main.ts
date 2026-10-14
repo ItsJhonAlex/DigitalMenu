@@ -38,6 +38,7 @@ try {
 }
 
 const repos = createRepos(db);
+/** Mismo objeto que createApp muta en rebindDatabase (RF-52). */
 const ctx = { runtime, log, startedAt, db, repos };
 const app = createApp(ctx);
 
@@ -144,11 +145,11 @@ async function main() {
   // RF-50: copia diaria al arrancar si > 24 h, y a la hora configurada
   const backups = createBackupService({
     dataDir: runtime.dataDir,
-    db,
+    getDb: () => ctx.db,
     keepDaily: runtime.config.backup.keepDaily,
     hour: runtime.config.backup.hour,
-    getLastAutoAt: () => repos.settings.getJson<string | null>("backup.last_at", null),
-    setLastAutoAt: (iso) => repos.settings.setJson("backup.last_at", iso),
+    getLastAutoAt: () => ctx.repos.settings.getJson<string | null>("backup.last_at", null),
+    setLastAutoAt: (iso) => ctx.repos.settings.setJson("backup.last_at", iso),
     log: (level, msg, extra) => log[level](msg, extra),
   });
   try {
@@ -161,9 +162,9 @@ async function main() {
 
   // RF-37: comprobar IP al arrancar y cada 60 s
   createIpWatcher({
-    getSavedIp: () => repos.settings.getJson<string | null>("network.carta_ip", null),
-    getFlag: () => repos.settings.getJson<boolean>("network.ip_changed", false),
-    setFlag: (changed) => repos.settings.setJson("network.ip_changed", changed),
+    getSavedIp: () => ctx.repos.settings.getJson<string | null>("network.carta_ip", null),
+    getFlag: () => ctx.repos.settings.getJson<boolean>("network.ip_changed", false),
+    setFlag: (changed) => ctx.repos.settings.setJson("network.ip_changed", changed),
     intervalMs: 60_000,
     log: (level, msg, extra) => log[level](msg, extra),
   }).start();
@@ -174,7 +175,11 @@ async function main() {
 
 function shutdown(signal: string) {
   log.info(`Parada (${signal})`);
-  closeDatabase(db);
+  try {
+    closeDatabase(ctx.db);
+  } catch {
+    // ignore
+  }
   log.close();
   process.exit(0);
 }

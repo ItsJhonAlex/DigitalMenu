@@ -1,12 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import type { RuntimeOptions } from "./config";
-import type { Repos } from "./db/repos";
+import { closeDatabase } from "./db";
+import { type Repos, createRepos } from "./db/repos";
 import { HttpError, errorJson } from "./http/errors";
 import type { Logger } from "./logger";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
+import { type MenuEventsHub, createMenuEventsHub } from "./services/menu-events";
 
 export type AppContext = {
   runtime: RuntimeOptions;
@@ -14,18 +16,48 @@ export type AppContext = {
   startedAt: number;
   db: Database;
   repos: Repos;
+  menuEvents: MenuEventsHub;
+  /** Tras restaurar (RF-52): cierra la BD anterior y reasigna db/repos. */
+  rebindDatabase: (next: Database) => void;
 };
 
-export function createApp(ctx: AppContext) {
+export function createApp(
+  ctx: Omit<AppContext, "menuEvents" | "rebindDatabase"> & {
+    menuEvents?: MenuEventsHub;
+    rebindDatabase?: (next: Database) => void;
+  },
+) {
+  const menuEvents =
+    ctx.menuEvents ??
+    createMenuEventsHub({
+      log: (level, msg, extra) => ctx.log[level === "debug" ? "debug" : level](msg, extra),
+    });
+  // Mutar el mismo objeto: rutas y main deben ver db/repos tras restore.
+  const full = ctx as AppContext;
+  full.menuEvents = menuEvents;
+  full.rebindDatabase =
+    ctx.rebindDatabase ??
+    ((next: Database) => {
+      const prev = full.db;
+      full.db = next;
+      full.repos = createRepos(next);
+      if (prev !== next) {
+        try {
+          closeDatabase(prev);
+        } catch {
+          // ya cerrada en restore
+        }
+      }
+    });
   const app = new Hono();
 
   app.use("*", securityHeaders());
 
-  app.route("/", publicRoutes(ctx));
-  app.route("/", adminRoutes(ctx));
+  app.route("/", publicRoutes(full));
+  app.route("/", adminRoutes(full));
 
   // En --dev: assets TS/CSS de Carta y shared (Admin también en routes/admin)
-  if (ctx.runtime.dev) {
+  if (full.runtime.dev) {
     app.get("/carta/*", async (c) => {
       const rel = c.req.path.replace(/^\/carta\//, "");
       return serveDevFile(`src/carta/${safeRel(rel)}`);
@@ -41,7 +73,7 @@ export function createApp(ctx: AppContext) {
     if (err instanceof HttpError) {
       return c.json(errorJson(err), err.status as 400);
     }
-    ctx.log.error("Unhandled error", { message: err.message, stack: err.stack });
+    full.log.error("Unhandled error", { message: err.message, stack: err.stack });
     return c.json({ error: { code: "INTERNAL_ERROR", message: "Error interno" } }, 500);
   });
 

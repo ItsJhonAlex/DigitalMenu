@@ -13,6 +13,7 @@ import {
   formatLocalStamp,
   fullBackupFileName,
   preMigrationBackupFileName,
+  preRestoreBackupFileName,
 } from "../src/server/services/backup";
 
 const dirs: string[] = [];
@@ -48,7 +49,7 @@ function setup() {
   let lastAt: string | null = null;
   const svc = createBackupService({
     dataDir,
-    db,
+    getDb: () => db,
     keepDaily: 3,
     hour: 4,
     getLastAutoAt: () => lastAt,
@@ -82,6 +83,7 @@ describe("backup stamps / FILE_RE (T11)", () => {
     expect(BACKUP_FILE_RE.test(fullBackupFileName(d))).toBe(true);
     expect(BACKUP_FILE_RE.test(preMigrationBackupFileName(1, d))).toBe(true);
     expect(preMigrationBackupFileName(2, d)).toBe("pre-migracion-002-20261014-1630.db");
+    expect(BACKUP_FILE_RE.test(preRestoreBackupFileName(d))).toBe(true);
     // Formato antiguo (ISO) NO válido para descarga
     expect(BACKUP_FILE_RE.test("pre-migracion-001-2026-10-14T16-30-45.db")).toBe(false);
   });

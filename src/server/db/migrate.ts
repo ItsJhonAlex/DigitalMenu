@@ -16,6 +16,23 @@ export const MIGRATIONS: Migration[] = [
   { version: 2, name: "002_seed", sql: seedSql },
 ];
 
+/** Versión máxima de esquema que conoce esta build (RF-52). */
+export function appSchemaVersion(): number {
+  return MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0);
+}
+
+/** MAX(version) en schema_migrations; 0 si la tabla no existe o está vacía. */
+export function readSchemaVersion(db: Database): number {
+  try {
+    const row = db.prepare(`SELECT MAX(version) AS v FROM schema_migrations`).get() as {
+      v: number | null;
+    } | null;
+    return row?.v ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export type MigrateResult = {
   applied: number[];
   already: number[];

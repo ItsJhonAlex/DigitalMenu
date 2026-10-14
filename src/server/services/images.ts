@@ -35,7 +35,10 @@ function hash16(buf: Uint8Array): string {
   return createHash("sha256").update(buf).digest("hex").slice(0, 16);
 }
 
-export function createImagesService(opts: { dataDir: string; db: Database }) {
+export function createImagesService(opts: {
+  dataDir: string;
+  getDb: () => Database;
+}) {
   const imagesDir = join(opts.dataDir, "images");
   if (!existsSync(imagesDir)) mkdirSync(imagesDir, { recursive: true });
 
@@ -74,7 +77,8 @@ export function createImagesService(opts: { dataDir: string; db: Database }) {
 
     referencedHashes(): Set<string> {
       const set = new Set<string>();
-      const rows = opts.db
+      const rows = opts
+        .getDb()
         .prepare(
           `SELECT image AS h FROM categories WHERE image IS NOT NULL
            UNION SELECT image FROM products WHERE image IS NOT NULL
@@ -84,7 +88,10 @@ export function createImagesService(opts: { dataDir: string; db: Database }) {
       for (const r of rows) {
         if (HASH_RE.test(r.h)) set.add(r.h);
       }
-      const logo = opts.db.prepare(`SELECT value FROM settings WHERE key = 'carta.logo'`).get() as {
+      const logo = opts
+        .getDb()
+        .prepare(`SELECT value FROM settings WHERE key = 'carta.logo'`)
+        .get() as {
         value: string;
       } | null;
       if (logo) {

@@ -37,7 +37,7 @@ function setup() {
   const db = openDatabase(dataDir);
   dbs.push(db);
   migrate(db, { dataDir });
-  const images = createImagesService({ dataDir, db });
+  const images = createImagesService({ dataDir, getDb: () => db });
   return { dataDir, images };
 }
 

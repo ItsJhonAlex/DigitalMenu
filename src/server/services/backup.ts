@@ -28,7 +28,8 @@ export type BackupItem = {
 
 export type BackupServiceOpts = {
   dataDir: string;
-  db: Database;
+  /** Getter: tras restaurar (RF-52) la BD en vivo puede cambiar. */
+  getDb: () => Database;
   keepDaily: number;
   hour: number;
   getLastAutoAt: () => string | null;
@@ -59,6 +60,16 @@ export function fullBackupFileName(d = new Date()): string {
 /** Coincide con BACKUP_FILE_RE: pre-migracion-NNN-AAAAMMDD-HHMM.db */
 export function preMigrationBackupFileName(version: number, d = new Date()): string {
   return `pre-migracion-${String(version).padStart(3, "0")}-${formatLocalStamp(d).stamp}.db`;
+}
+
+/** Copia previa a importación CSV/XLSX: pre-import-AAAAMMDD-HHMM.db */
+export function preImportBackupFileName(d = new Date()): string {
+  return `pre-import-${formatLocalStamp(d).stamp}.db`;
+}
+
+/** Copia de seguridad del estado actual antes de restaurar (RF-52). */
+export function preRestoreBackupFileName(d = new Date()): string {
+  return `pre-restore-${formatLocalStamp(d).stamp}.db`;
 }
 
 export function backupsDirOf(dataDir: string): string {
@@ -154,7 +165,7 @@ export function createBackupService(opts: BackupServiceOpts) {
       file = dailyBackupFileName(alt);
       dest = join(dir, file);
     }
-    vacuumInto(opts.db, dest);
+    vacuumInto(opts.getDb(), dest);
     const bytes = statSync(dest).size;
     opts.setLastAutoAt(new Date().toISOString());
     const removed = rotateDaily();
@@ -212,7 +223,7 @@ export function createBackupService(opts: BackupServiceOpts) {
 
     const tmpDb = join(dir, `.tmp-full-${Date.now()}.db`);
     try {
-      vacuumInto(opts.db, tmpDb);
+      vacuumInto(opts.getDb(), tmpDb);
       const raw: Record<string, Uint8Array> = {
         "menu.db": new Uint8Array(readFileSync(tmpDb)),
       };

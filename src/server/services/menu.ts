@@ -18,14 +18,17 @@ const UI_DEFAULTS: Record<string, Record<string, string>> = {
 
 type CacheEntry = { etag: string; body: MenuResponse; builtAt: number };
 
-export function createMenuService(opts: { repos: Repos }) {
+export function createMenuService(opts: { getRepos: () => Repos }) {
   const cache = new Map<string, CacheEntry>();
+  const repos = () => opts.getRepos();
 
   const resolveLang = (
     requested: string | undefined,
   ): { lang: string; requestedLang: string | null } => {
-    const active = opts.repos.languages.listActive().map((l) => l.code);
-    const defaultLang = opts.repos.settings.getJson<string>("carta.default_lang", "es");
+    const active = repos()
+      .languages.listActive()
+      .map((l) => l.code);
+    const defaultLang = repos().settings.getJson<string>("carta.default_lang", "es");
     if (requested && active.includes(requested)) {
       return { lang: requested, requestedLang: requested };
     }
@@ -45,11 +48,11 @@ export function createMenuService(opts: { repos: Repos }) {
     id: number,
     lang: string,
   ): { name: string; description: string | null; fallback: boolean } => {
-    const primary = opts.repos.translations.get(entity, id, lang);
+    const primary = repos().translations.get(entity, id, lang);
     if (primary?.name) {
       return { name: primary.name, description: primary.description, fallback: false };
     }
-    const es = opts.repos.translations.get(entity, id, "es");
+    const es = repos().translations.get(entity, id, "es");
     return {
       name: es?.name ?? "—",
       description: es?.description ?? null,
@@ -58,7 +61,7 @@ export function createMenuService(opts: { repos: Repos }) {
   };
 
   const localizedSetting = (key: string, lang: string): string | null => {
-    const raw = opts.repos.settings.getJson<unknown>(key, null);
+    const raw = repos().settings.getJson<unknown>(key, null);
     if (raw == null) return null;
     if (typeof raw === "string") return raw;
     if (typeof raw === "object" && raw !== null) {
@@ -69,16 +72,16 @@ export function createMenuService(opts: { repos: Repos }) {
   };
 
   const build = (lang: string, requestedLang: string | null): MenuResponse => {
-    const version = opts.repos.settings.getMenuRevision();
-    const currencies = opts.repos.currencies.listActive();
+    const version = repos().settings.getMenuRevision();
+    const currencies = repos().currencies.listActive();
     const base = currencies.find((c) => c.is_base === 1) ?? currencies[0];
-    const defaultCurrency = opts.repos.settings.getJson<string>(
+    const defaultCurrency = repos().settings.getJson<string>(
       "carta.default_currency",
       base?.code ?? "CUP",
     );
-    const second = opts.repos.settings.getJson<string | null>("carta.second_currency", null);
-    const showRate = opts.repos.settings.getJson<boolean>("carta.show_rate", true);
-    const showImages = opts.repos.settings.getJson<boolean>("carta.show_images", true);
+    const second = repos().settings.getJson<string | null>("carta.second_currency", null);
+    const showRate = repos().settings.getJson<boolean>("carta.show_rate", true);
+    const showImages = repos().settings.getJson<boolean>("carta.show_images", true);
 
     const list: CurrencyDto[] = currencies.map((c) => ({
       code: c.code,
@@ -92,24 +95,26 @@ export function createMenuService(opts: { repos: Repos }) {
       rateUpdatedAt: c.rate_updated_at,
     }));
 
-    const logoHash = opts.repos.settings.getJson<string | null>("carta.logo", null);
+    const logoHash = repos().settings.getJson<string | null>("carta.logo", null);
     const restaurant = {
-      name: opts.repos.settings.getJson<string>("carta.restaurant_name", "Avanzar In Time"),
+      name: repos().settings.getJson<string>("carta.restaurant_name", "Avanzar In Time"),
       logo: logoHash ? `/img/${logoHash}.webp` : null,
       welcome: localizedSetting("carta.welcome", lang),
       footer: localizedSetting("carta.footer", lang),
     };
 
     const uiBase = { ...(UI_DEFAULTS.es ?? {}), ...(UI_DEFAULTS[lang] ?? {}) };
-    for (const row of opts.repos.uiStrings.listByLang(lang)) {
+    for (const row of repos().uiStrings.listByLang(lang)) {
       uiBase[row.key] = row.value;
     }
 
     // Categoría desactivada manda: no sale ella ni sus productos (aunque el producto esté activo)
-    const visibleCats = opts.repos.categories.list().filter((c) => c.visible === 1);
+    const visibleCats = repos()
+      .categories.list()
+      .filter((c) => c.visible === 1);
     const visibleCatIds = new Set(visibleCats.map((c) => c.id));
-    const productsInVisibleCats = opts.repos.products
-      .list({ visible: true })
+    const productsInVisibleCats = repos()
+      .products.list({ visible: true })
       .filter((p) => visibleCatIds.has(p.category_id));
 
     const categoriesOut: MenuCategory[] = [];
@@ -141,21 +146,23 @@ export function createMenuService(opts: { repos: Repos }) {
     }
 
     const offersOut: MenuOffer[] = [];
-    for (const o of opts.repos.offers.list()) {
+    for (const o of repos().offers.list()) {
       if (o.visible !== 1) continue;
       const t = pickText("offer", o.id, lang);
-      const items = opts.repos.offers.items(o.id).map((it) => {
-        const pt = pickText("product", it.product_id, lang);
-        return { productId: it.product_id, name: pt.name, quantity: it.quantity };
-      });
+      const items = repos()
+        .offers.items(o.id)
+        .map((it) => {
+          const pt = pickText("product", it.product_id, lang);
+          return { productId: it.product_id, name: pt.name, quantity: it.quantity };
+        });
       offersOut.push({
         id: o.id,
         name: t.name,
         description: t.description,
         priceMinor: o.price_minor,
-        regularMinor: opts.repos.offers.regularMinor(o.id),
+        regularMinor: repos().offers.regularMinor(o.id),
         showSavings: o.show_savings === 1,
-        available: opts.repos.offers.effectiveAvailable(o.id),
+        available: repos().offers.effectiveAvailable(o.id),
         image: imageOf(o.image),
         items,
         fallback: t.fallback,
@@ -166,10 +173,12 @@ export function createMenuService(opts: { repos: Repos }) {
       version,
       lang,
       requestedLang,
-      languages: opts.repos.languages.listActive().map((l) => ({
-        code: l.code,
-        nativeName: l.native_name,
-      })),
+      languages: repos()
+        .languages.listActive()
+        .map((l) => ({
+          code: l.code,
+          nativeName: l.native_name,
+        })),
       currency: {
         base: base?.code ?? "CUP",
         default: defaultCurrency,
@@ -192,7 +201,7 @@ export function createMenuService(opts: { repos: Repos }) {
     get(requestedLang: string | undefined): { body: MenuResponse; etag: string } {
       const { lang, requestedLang: req } = resolveLang(requestedLang);
       // menu.revision sube en cada escritura del admin (y settings.setJson)
-      const rev = opts.repos.settings.getMenuRevision();
+      const rev = repos().settings.getMenuRevision();
       const cacheKey = `${lang}:${rev}`;
       const hit = cache.get(cacheKey);
       if (hit) return { body: hit.body, etag: hit.etag };

@@ -5,7 +5,10 @@ import { createAdminRouter } from "./base";
 
 export function imagesAdmin(ctx: AppContext) {
   const app = createAdminRouter(ctx);
-  const images = createImagesService({ dataDir: ctx.runtime.dataDir, db: ctx.db });
+  const images = createImagesService({
+    dataDir: ctx.runtime.dataDir,
+    getDb: () => ctx.db,
+  });
 
   app.post("/api/admin/images", async (c) => {
     const form = await c.req.parseBody();
