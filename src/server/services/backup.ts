@@ -67,9 +67,14 @@ export function preImportBackupFileName(d = new Date()): string {
   return `pre-import-${formatLocalStamp(d).stamp}.db`;
 }
 
-/** Copia de seguridad del estado actual antes de restaurar (RF-52). */
+/** Copia .db del estado actual antes de restaurar (RF-52). */
 export function preRestoreBackupFileName(d = new Date()): string {
   return `pre-restore-${formatLocalStamp(d).stamp}.db`;
+}
+
+/** Copia completa (.zip con db+imágenes) antes de restaurar. */
+export function preRestoreFullBackupFileName(d = new Date()): string {
+  return `pre-restore-${formatLocalStamp(d).stamp}.zip`;
 }
 
 export function backupsDirOf(dataDir: string): string {
@@ -211,13 +216,17 @@ export function createBackupService(opts: BackupServiceOpts) {
     return createDailyDb(now);
   }
 
-  function createFullZip(now = new Date()): { file: string; bytes: number; path: string } {
+  function createFullZip(
+    now = new Date(),
+    preferredName?: string,
+  ): { file: string; bytes: number; path: string } {
     const dir = backupsDir();
-    let file = fullBackupFileName(now);
+    let file = preferredName ?? fullBackupFileName(now);
     let dest = join(dir, file);
     if (existsSync(dest)) {
       const alt = new Date(now.getTime() + 60_000);
-      file = fullBackupFileName(alt);
+      const stamp = formatLocalStamp(alt).stamp;
+      file = preferredName ? preferredName.replace(/\d{8}-\d{4}/, stamp) : fullBackupFileName(alt);
       dest = join(dir, file);
     }
 

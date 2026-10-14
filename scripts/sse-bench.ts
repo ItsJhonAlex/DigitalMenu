@@ -78,3 +78,5 @@ console.log(
 await Bun.sleep(holdMs);
 for (const ac of controllers) ac.abort();
 console.log(`Fin en ${Date.now() - started} ms`);
+
+export {};

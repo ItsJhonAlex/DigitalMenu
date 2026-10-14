@@ -5,6 +5,7 @@ import { HttpError, errorJson } from "../../http/errors";
 import { adminPin } from "../../middleware/adminPin";
 import { localOnly } from "../../middleware/localOnly";
 import { requireJsonWrites } from "../../middleware/requireJson";
+import { isRestoreBusy } from "../../services/restore";
 import { backupsAdmin } from "./backups";
 import { catalogIoAdmin } from "./catalog-io";
 import { categoriesAdmin } from "./categories";
@@ -27,6 +28,28 @@ export function adminRoutes(ctx: AppContext) {
   app.use("/admin", localOnly(port, { looseHost: ctx.runtime.dev }));
   app.use("/api/admin/*", requireJsonWrites());
   app.use("/api/admin/*", adminPin());
+  // Durante restauración no aceptar otras escrituras (salvo la propia restore)
+  app.use("/api/admin/*", async (c, next) => {
+    const method = c.req.method;
+    if (
+      isRestoreBusy() &&
+      (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE")
+    ) {
+      const path = c.req.path.replace(/\/+$/, "") || "/";
+      if (path !== "/api/admin/backups/restore") {
+        return c.json(
+          {
+            error: {
+              code: "CONFLICT",
+              message: "Hay una restauración en curso; espere a que termine",
+            },
+          },
+          409,
+        );
+      }
+    }
+    await next();
+  });
   app.use("/api/admin/*", async (c, next) => {
     await next();
     c.header("Cache-Control", "no-store");

@@ -104,7 +104,8 @@ async function main() {
     Bun.serve({
       hostname: host,
       port,
-      maxRequestBodySize: 3 * 1024 * 1024,
+      // Límite global holgado; cada ruta aplica el suyo (imágenes 2 MB, restore 256 MB, …)
+      maxRequestBodySize: 64 * 1024 * 1024,
       fetch: (req, server) => app.fetch(req, { server }),
     });
   } catch (err) {

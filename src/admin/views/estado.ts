@@ -11,7 +11,7 @@ export type DiagnosticsDto = {
   dataDir: string;
   port: number;
   uptimeSec: number;
-  memory: { rssMB: number; heapUsedMB: number };
+  memory: { rssMB: number };
   menuEvents: { clients: number; maxClients: number; lastRevision: number | null };
   network: {
     savedIp: string | null;
@@ -131,7 +131,10 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
       metric("Imágenes", formatBytes(d.imagesBytes)),
       metric("Versión", `v${d.version} · esquema ${d.schemaVersion}`),
       metric("Datos", d.dataDir),
-      metric("Revisión carta", d.menuEvents.lastRevision != null ? String(d.menuEvents.lastRevision) : "—"),
+      metric(
+        "Revisión carta",
+        d.menuEvents.lastRevision != null ? String(d.menuEvents.lastRevision) : "—",
+      ),
     );
 
     clear(alertsBody);

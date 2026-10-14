@@ -3,7 +3,11 @@ import { join } from "node:path";
 import type { AppContext } from "../../app";
 import { HttpError, notFound } from "../../http/errors";
 import { requireObject, validationError } from "../../http/validate";
-import { BACKUP_FILE_RE, createBackupService } from "../../services/backup";
+import {
+  BACKUP_FILE_RE,
+  createBackupService,
+  preRestoreFullBackupFileName,
+} from "../../services/backup";
 import { RestoreError, createRestoreService } from "../../services/restore";
 import { createAdminRouter } from "./base";
 
@@ -39,6 +43,7 @@ export function backupsAdmin(ctx: AppContext) {
   const restoreSvc = createRestoreService({
     dataDir: ctx.runtime.dataDir,
     getDb: () => ctx.db,
+    createSafetyBackup: () => backups.createFullZip(new Date(), preRestoreFullBackupFileName()),
     replaceDatabase: (next) => ctx.rebindDatabase(next),
     log: (level, msg, extra) => ctx.log[level](msg, extra),
   });
@@ -91,11 +96,10 @@ export function backupsAdmin(ctx: AppContext) {
       if (ct.includes("multipart/form-data")) {
         const form = await c.req.parseBody({ all: true });
         const confirmRaw = form.confirm;
-        const confirm =
-          confirmRaw === true ||
-          confirmRaw === "true" ||
-          confirmRaw === "1" ||
-          (Array.isArray(confirmRaw) && confirmRaw.some((v) => v === "true" || v === true));
+        const asFlag = (v: unknown) => v === "true" || v === "1";
+        const confirm = Array.isArray(confirmRaw)
+          ? confirmRaw.some(asFlag)
+          : asFlag(confirmRaw);
         if (!confirm) {
           throw validationError("Se requiere confirm: true");
         }

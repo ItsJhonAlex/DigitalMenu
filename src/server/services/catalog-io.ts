@@ -171,13 +171,7 @@ export function buildCatalogSheets(repos: Repos): Sheet[] {
   for (const entity of ["category", "product", "offer"] as const) {
     for (const lang of repos.languages.list().map((l) => l.code)) {
       for (const t of repos.translations.listByLangEntity(lang, entity)) {
-        trRows.push([
-          t.entity,
-          String(t.entity_id),
-          t.lang,
-          t.name,
-          t.description ?? "",
-        ]);
+        trRows.push([t.entity, String(t.entity_id), t.lang, t.name, t.description ?? ""]);
       }
     }
   }
@@ -233,11 +227,7 @@ export function parseCatalogFile(filename: string, buf: Uint8Array): Sheet[] {
   throw new Error("Formato no soportado (use .xlsx, .zip de CSV o .csv)");
 }
 
-function parseCategoriesSheet(
-  sheet: Sheet,
-  repos: Repos,
-  errors: ImportIssue[],
-): CategoryPlan[] {
+function parseCategoriesSheet(sheet: Sheet, repos: Repos, errors: ImportIssue[]): CategoryPlan[] {
   if (sheet.rows.length < 2) return [];
   const header = sheet.rows[0]!.map((h) => h.trim().toLowerCase());
   if (headerIndex(header, "name_es") < 0 && headerIndex(header, "id") < 0) {
@@ -508,104 +498,123 @@ export function backupBeforeImport(db: Database, dataDir: string): string {
   return file;
 }
 
-export function applyCatalogImport(repos: Repos, plan: ImportPlan): { created: number; updated: number } {
-  let created = 0;
-  let updated = 0;
+export function applyCatalogImport(
+  db: Database,
+  repos: Repos,
+  plan: ImportPlan,
+): { created: number; updated: number } {
+  return db.transaction(() => {
+    let created = 0;
+    let updated = 0;
 
-  // Categorías primero
-  for (const c of plan.categories) {
-    if (c.action === "create") {
-      const id = repos.categories.create({
-        visible: c.visible,
-        image: c.image,
-        sort_order: c.sort_order,
-      });
-      for (const [lang, t] of Object.entries(c.i18n)) {
-        repos.translations.upsert({
-          entity: "category",
-          entity_id: id,
-          lang,
-          name: t.name,
-          description: t.description,
+    // Categorías primero
+    for (const c of plan.categories) {
+      if (c.action === "create") {
+        const id = repos.categories.create({
+          visible: c.visible,
+          image: c.image,
+          sort_order: c.sort_order,
         });
-      }
-      created++;
-    } else if (c.id != null) {
-      repos.categories.update(c.id, {
-        sort_order: c.sort_order,
-        visible: c.visible,
-        image: c.image,
-      });
-      for (const [lang, t] of Object.entries(c.i18n)) {
-        repos.translations.upsert({
-          entity: "category",
-          entity_id: c.id,
-          lang,
-          name: t.name,
-          description: t.description,
+        for (const [lang, t] of Object.entries(c.i18n)) {
+          repos.translations.upsert({
+            entity: "category",
+            entity_id: id,
+            lang,
+            name: t.name,
+            description: t.description,
+          });
+        }
+        created++;
+      } else if (c.id != null) {
+        repos.categories.update(c.id, {
+          sort_order: c.sort_order,
+          visible: c.visible,
+          image: c.image,
         });
+        for (const [lang, t] of Object.entries(c.i18n)) {
+          repos.translations.upsert({
+            entity: "category",
+            entity_id: c.id,
+            lang,
+            name: t.name,
+            description: t.description,
+          });
+        }
+        updated++;
       }
-      updated++;
     }
-  }
 
-  for (const p of plan.products) {
-    if (p.action === "create") {
-      const id = repos.products.create({
-        category_id: p.category_id,
-        type: p.type,
-        price_minor: p.price_minor,
-        image: p.image,
-        available: p.available,
-        visible: p.visible,
-        sort_order: p.sort_order,
-      });
-      for (const [lang, t] of Object.entries(p.i18n)) {
-        repos.translations.upsert({
-          entity: "product",
-          entity_id: id,
-          lang,
-          name: t.name,
-          description: t.description,
+    for (const p of plan.products) {
+      if (p.action === "create") {
+        const id = repos.products.create({
+          category_id: p.category_id,
+          type: p.type,
+          price_minor: p.price_minor,
+          image: p.image,
+          available: p.available,
+          visible: p.visible,
+          sort_order: p.sort_order,
         });
-      }
-      created++;
-    } else if (p.id != null) {
-      const existing = repos.products.get(p.id);
-      if (!existing) continue;
-      repos.products.update(p.id, {
-        category_id: p.category_id,
-        type: p.type,
-        price_minor: p.price_minor,
-        image: p.image,
-        available: p.available,
-        visible: p.visible,
-        sort_order: p.sort_order,
-      });
-      for (const [lang, t] of Object.entries(p.i18n)) {
-        repos.translations.upsert({
-          entity: "product",
-          entity_id: p.id,
-          lang,
-          name: t.name,
-          description: t.description,
+        for (const [lang, t] of Object.entries(p.i18n)) {
+          repos.translations.upsert({
+            entity: "product",
+            entity_id: id,
+            lang,
+            name: t.name,
+            description: t.description,
+          });
+        }
+        created++;
+      } else if (p.id != null) {
+        const existing = repos.products.get(p.id);
+        if (!existing) continue;
+        repos.products.update(p.id, {
+          category_id: p.category_id,
+          type: p.type,
+          price_minor: p.price_minor,
+          image: p.image,
+          available: p.available,
+          visible: p.visible,
+          sort_order: p.sort_order,
         });
+        for (const [lang, t] of Object.entries(p.i18n)) {
+          repos.translations.upsert({
+            entity: "product",
+            entity_id: p.id,
+            lang,
+            name: t.name,
+            description: t.description,
+          });
+        }
+        updated++;
       }
-      updated++;
     }
-  }
 
-  return { created, updated };
+    return { created, updated };
+  })();
 }
 
 /** Planes en memoria (no ensucian settings ni suben revision). TTL 30 min. */
 const PLAN_TTL_MS = 30 * 60 * 1000;
+const MAX_PENDING_PLANS = 16;
 const pendingPlans = new Map<string, { plan: ImportPlan; at: number }>();
 
 export function storeImportPlan(_repos: Repos, plan: ImportPlan): string {
   const now = Date.now();
   for (const [k, v] of pendingPlans) {
     if (now - v.at > PLAN_TTL_MS) pendingPlans.delete(k);
+  }
+  while (pendingPlans.size >= MAX_PENDING_PLANS) {
+    let oldestKey: string | null = null;
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const [k, v] of pendingPlans) {
+      if (v.at < oldestAt) {
+        oldestAt = v.at;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) pendingPlans.delete(oldestKey);
+    else break;
   }
   const token = `imp-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   pendingPlans.set(token, { plan, at: now });

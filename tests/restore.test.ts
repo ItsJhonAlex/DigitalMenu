@@ -14,6 +14,7 @@ import {
   BACKUP_FILE_RE,
   createBackupService,
   preRestoreBackupFileName,
+  preRestoreFullBackupFileName,
   vacuumInto,
 } from "../src/server/services/backup";
 import {
@@ -21,6 +22,14 @@ import {
   createRestoreService,
   validateBackupDbFile,
 } from "../src/server/services/restore";
+
+function fakeSafety(bak: string) {
+  return () => {
+    const file = preRestoreFullBackupFileName();
+    writeFileSync(join(bak, file), new Uint8Array([0x50, 0x4b])); // PK stub
+    return { file };
+  };
+}
 
 const dirs: string[] = [];
 const dbs: Database[] = [];
@@ -30,6 +39,7 @@ const silentLog: Logger = {
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined,
+  flush: () => undefined,
   close: () => undefined,
 };
 
@@ -132,6 +142,9 @@ describe("restore service (RF-52)", () => {
     const name = preRestoreBackupFileName(new Date(2026, 9, 14, 17, 15));
     expect(name).toBe("pre-restore-20261014-1715.db");
     expect(BACKUP_FILE_RE.test(name)).toBe(true);
+    expect(BACKUP_FILE_RE.test(preRestoreFullBackupFileName(new Date(2026, 9, 14, 17, 15)))).toBe(
+      true,
+    );
   });
 
   test("restaura .db y crea pre-restore; datos cambian", async () => {
@@ -150,6 +163,7 @@ describe("restore service (RF-52)", () => {
     const restore = createRestoreService({
       dataDir,
       getDb: () => ctx.db,
+      createSafetyBackup: fakeSafety(bak),
       log: () => undefined,
     });
 
@@ -157,6 +171,7 @@ describe("restore service (RF-52)", () => {
     expect(result.ok).toBe(true);
     expect(BACKUP_FILE_RE.test(result.safetyBackup)).toBe(true);
     expect(result.safetyBackup.startsWith("pre-restore-")).toBe(true);
+    expect(result.safetyBackup.endsWith(".zip")).toBe(true);
     expect(existsSync(join(bak, result.safetyBackup))).toBe(true);
     expect(ctx.repos.settings.getJson("carta.restaurant_name", "")).toBe("Actual");
   });
@@ -173,6 +188,8 @@ describe("restore service (RF-52)", () => {
       "menu.db": new Uint8Array(readFileSync(tmpDb)),
       "images/abcd1234abcd1234.webp": imgBytes,
       "images/abcd1234abcd1234_t.webp": imgBytes,
+      "images/../evil.webp": imgBytes,
+      "images/not-a-hash.webp": imgBytes,
     });
     const zipName = "full-20261014-1200.zip";
     writeFileSync(join(bak, zipName), zipped);
@@ -183,6 +200,7 @@ describe("restore service (RF-52)", () => {
     const restore = createRestoreService({
       dataDir,
       getDb: () => ctx.db,
+      createSafetyBackup: fakeSafety(bak),
     });
 
     const result = await restore.restore({ type: "file", fileName: zipName });
@@ -190,6 +208,8 @@ describe("restore service (RF-52)", () => {
     expect(result.restoredImages).toBe(true);
     expect(existsSync(join(dataDir, "images", "abcd1234abcd1234.webp"))).toBe(true);
     expect(existsSync(join(dataDir, "images", "old.webp"))).toBe(false);
+    expect(existsSync(join(dataDir, "images", "evil.webp"))).toBe(false);
+    expect(existsSync(join(dataDir, "images", "not-a-hash.webp"))).toBe(false);
   });
 });
 

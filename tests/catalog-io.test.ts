@@ -16,7 +16,7 @@ import {
   parseCatalogFile,
   previewCatalogImport,
 } from "../src/server/services/catalog-io";
-import { buildXlsx, parseXlsx, toCsv } from "../src/server/services/spreadsheet";
+import { buildXlsx, excelSafeText, parseXlsx, toCsv } from "../src/server/services/spreadsheet";
 
 const dirs: string[] = [];
 const dbs: Database[] = [];
@@ -75,6 +75,21 @@ function setup() {
   return { app, repos, db, dataDir };
 }
 
+describe("spreadsheet formula guard", () => {
+  test("excelSafeText antepone ' a = + - @", () => {
+    expect(excelSafeText("=1+1")).toBe("'=1+1");
+    expect(excelSafeText("+cmd")).toBe("'+cmd");
+    expect(excelSafeText("-1")).toBe("'-1");
+    expect(excelSafeText("@sum")).toBe("'@sum");
+    expect(excelSafeText("Tapas")).toBe("Tapas");
+  });
+
+  test("toCsv escapa fórmulas", () => {
+    const csv = toCsv([["name"], ["=HYPERLINK(x)"]]);
+    expect(csv).toContain("'=HYPERLINK(x)");
+  });
+});
+
 describe("spreadsheet xlsx roundtrip", () => {
   test("buildXlsx / parseXlsx conserva celdas", () => {
     const bytes = buildXlsx([
@@ -94,7 +109,7 @@ describe("spreadsheet xlsx roundtrip", () => {
 
 describe("catalog export/import", () => {
   test("export xlsx y preview update por id", () => {
-    const { repos } = setup();
+    const { repos, db } = setup();
     const sheets = buildCatalogSheets(repos);
     expect(sheets.map((s) => s.name)).toEqual(["categories", "products", "translations"]);
     const cat = repos.categories.list()[0]!;
@@ -112,13 +127,13 @@ describe("catalog export/import", () => {
     const preview = previewCatalogImport(repos, parsed);
     expect(preview.errors).toEqual([]);
     expect(preview.updates.some((u) => u.id === cat.id && u.label === "Renombrada IO")).toBe(true);
-    applyCatalogImport(repos, preview.plan);
+    applyCatalogImport(db, repos, preview.plan);
     expect(repos.translations.get("category", cat.id, "es")?.name).toBe("Renombrada IO");
     expect(es?.name).not.toBe("Renombrada IO");
   });
 
   test("csv create con id vacío", () => {
-    const { repos } = setup();
+    const { repos, db } = setup();
     const catId = repos.categories.list()[0]!.id;
     const csv = toCsv([
       [
@@ -141,7 +156,7 @@ describe("catalog export/import", () => {
     const preview = previewCatalogImport(repos, sheets);
     expect(preview.errors).toEqual([]);
     expect(preview.creates.some((c) => c.label === "Nuevo CSV")).toBe(true);
-    applyCatalogImport(repos, preview.plan);
+    applyCatalogImport(db, repos, preview.plan);
     const found = repos.products
       .list({ categoryId: catId })
       .some((p) => repos.translations.get("product", p.id, "es")?.name === "Nuevo CSV");

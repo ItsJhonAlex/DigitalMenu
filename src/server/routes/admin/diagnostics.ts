@@ -60,9 +60,7 @@ function pickLogAlerts(lines: string[], max = 30): string[] {
   const key =
     /\[(WARN|ERROR)\]|RF-37|IP del (equipo|POS)|copia|backup|SSE|EADDRINUSE|fall[oó]|error/i;
   const alerts = lines.filter((l) => key.test(l));
-  return (alerts.length > 0 ? alerts : lines.filter((l) => /\[(WARN|ERROR)\]/.test(l))).slice(
-    -max,
-  );
+  return (alerts.length > 0 ? alerts : lines.filter((l) => /\[(WARN|ERROR)\]/.test(l))).slice(-max);
 }
 
 export function diagnosticsAdmin(ctx: AppContext) {
@@ -92,8 +90,8 @@ export function diagnosticsAdmin(ctx: AppContext) {
       port,
       uptimeSec: Math.floor((Date.now() - ctx.startedAt) / 1000),
       memory: {
+        // En Bun la métrica útil es RSS (heap no es V8)
         rssMB: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
-        heapUsedMB: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
       },
       menuEvents: {
         clients: ctx.menuEvents.clientCount(),

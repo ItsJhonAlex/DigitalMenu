@@ -6,13 +6,22 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 export type Sheet = { name: string; rows: string[][] };
 
-/** Escape CSV (RFC-style). */
+/**
+ * Evita que Excel/Calc ejecuten fórmulas al abrir el export
+ * (celdas que empiezan por =, +, -, @ o carácter de control).
+ */
+export function excelSafeText(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  return value;
+}
+
+/** Escape CSV (RFC-style) + protección anti-fórmula. */
 export function toCsv(rows: string[][]): string {
   return rows
     .map((row) =>
       row
         .map((cell) => {
-          const s = cell ?? "";
+          const s = excelSafeText(cell ?? "");
           if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
           return s;
         })
@@ -107,7 +116,8 @@ function sheetXml(rows: string[][]): string {
     const cells = row
       .map((val, cIdx) => {
         const ref = `${colName(cIdx)}${rIdx + 1}`;
-        return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(val ?? "")}</t></is></c>`;
+        const safe = excelSafeText(val ?? "");
+        return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(safe)}</t></is></c>`;
       })
       .join("");
     lines.push(`<row r="${rIdx + 1}">${cells}</row>`);
@@ -159,13 +169,13 @@ export function buildXlsx(sheets: Sheet[]): Uint8Array {
 function extractInlineCells(sheetXmlText: string): string[][] {
   const rows: string[][] = [];
   const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/gi;
-  let rm: RegExpExecArray | null;
-  while ((rm = rowRe.exec(sheetXmlText))) {
+  let rm = rowRe.exec(sheetXmlText);
+  while (rm) {
     const rowXml = rm[1] ?? "";
     const cells: Array<{ col: number; val: string }> = [];
     const cellRe = /<c\b([^>]*)>([\s\S]*?)<\/c>/gi;
-    let cm: RegExpExecArray | null;
-    while ((cm = cellRe.exec(rowXml))) {
+    let cm = cellRe.exec(rowXml);
+    while (cm) {
       const attrs = cm[1] ?? "";
       const body = cm[2] ?? "";
       const refM = /\br="([A-Z]+)(\d+)"/.exec(attrs);
@@ -184,12 +194,14 @@ function extractInlineCells(sheetXmlText: string): string[][] {
         if (v) val = decodeXml(v[1] ?? "");
       }
       cells.push({ col, val });
+      cm = cellRe.exec(rowXml);
     }
     cells.sort((a, b) => a.col - b.col);
     const max = cells.reduce((m, c) => Math.max(m, c.col), -1);
     const row: string[] = Array.from({ length: max + 1 }, () => "");
     for (const c of cells) row[c.col] = c.val;
     rows.push(row);
+    rm = rowRe.exec(sheetXmlText);
   }
   return rows;
 }
@@ -210,16 +222,18 @@ export function parseXlsx(buf: Uint8Array): Sheet[] {
   const rels = strFromU8(files["xl/_rels/workbook.xml.rels"] ?? new Uint8Array());
   const sheetMeta: Array<{ name: string; target: string }> = [];
   const sheetTag = /<sheet\b([^>]*)\/>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = sheetTag.exec(wb))) {
+  let m = sheetTag.exec(wb);
+  while (m) {
     const attrs = m[1] ?? "";
     const name = /\bname="([^"]*)"/.exec(attrs)?.[1] ?? "Hoja";
     const rid = /\br:id="([^"]*)"/.exec(attrs)?.[1];
-    if (!rid) continue;
-    const rel = new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels);
-    const target = rel?.[1]?.replace(/^\//, "") ?? "";
-    const path = target.startsWith("xl/") ? target : `xl/${target}`;
-    sheetMeta.push({ name: decodeXml(name), target: path });
+    if (rid) {
+      const rel = new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels);
+      const target = rel?.[1]?.replace(/^\//, "") ?? "";
+      const path = target.startsWith("xl/") ? target : `xl/${target}`;
+      sheetMeta.push({ name: decodeXml(name), target: path });
+    }
+    m = sheetTag.exec(wb);
   }
   return sheetMeta.map((sh) => {
     const xml = strFromU8(files[sh.target] ?? new Uint8Array());
@@ -241,7 +255,10 @@ export function parseCsvZip(buf: Uint8Array): Sheet[] {
   const out: Sheet[] = [];
   for (const [path, data] of Object.entries(files)) {
     if (!path.toLowerCase().endsWith(".csv")) continue;
-    const name = path.split(/[/\\]/).pop()!.replace(/\.csv$/i, "");
+    const name = path
+      .split(/[/\\]/)
+      .pop()!
+      .replace(/\.csv$/i, "");
     out.push({ name, rows: parseCsv(strFromU8(data)) });
   }
   return out;

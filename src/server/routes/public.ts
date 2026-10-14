@@ -5,10 +5,7 @@ import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
 import { hasEmbeddedAssets, serveEmbedded } from "../assets";
 import { createMenuService } from "../services/menu";
-import {
-  MENU_EVENTS_MAX_CLIENTS,
-  menuEventsResponse,
-} from "../services/menu-events";
+import { MENU_EVENTS_MAX_CLIENTS, menuEventsResponse } from "../services/menu-events";
 
 const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
 
@@ -68,6 +65,15 @@ export function publicRoutes(ctx: AppContext) {
 
   /** SSE: revisión del menú en vivo (M1). Latido 25 s; tope de clientes. */
   app.get("/api/menu/events", (c) => {
+    // Bun cierra conexiones idle a los 10 s por defecto; el latido va a 25 s → sin timeout.
+    const server = (
+      c.env as { server?: { timeout: (req: Request, sec: number) => void } } | undefined
+    )?.server;
+    try {
+      server?.timeout(c.req.raw, 0);
+    } catch {
+      // app.request() en tests sin Bun.serve
+    }
     if (ctx.menuEvents.clientCount() >= MENU_EVENTS_MAX_CLIENTS) {
       return c.json(
         {

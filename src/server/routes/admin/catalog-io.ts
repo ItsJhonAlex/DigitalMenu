@@ -1,6 +1,7 @@
 import type { AppContext } from "../../app";
 import { validationError } from "../../http/validate";
 import {
+  type CatalogIoFormat,
   applyCatalogImport,
   backupBeforeImport,
   clearImportPlan,
@@ -9,24 +10,24 @@ import {
   parseCatalogFile,
   previewCatalogImport,
   storeImportPlan,
-  type CatalogIoFormat,
-  type ImportPlan,
 } from "../../services/catalog-io";
+import { isRestoreBusy } from "../../services/restore";
 import { createAdminRouter } from "./base";
 
 const MAX_UPLOAD = 8 * 1024 * 1024;
 
 export function catalogIoAdmin(ctx: AppContext) {
   const app = createAdminRouter(ctx);
-  const { repos, db, runtime } = ctx;
 
   app.get("/api/admin/catalog/export", (c) => {
     const format = (c.req.query("format") ?? "xlsx") as CatalogIoFormat;
     if (format !== "xlsx" && format !== "csvzip" && format !== "csv") {
       throw validationError("format debe ser xlsx, csvzip o csv");
     }
-    const { bytes, filename, contentType } = exportCatalog(repos, format);
-    return new Response(bytes, {
+    const { bytes, filename, contentType } = exportCatalog(ctx.repos, format);
+    // Copia a ArrayBuffer propio (tsc: Uint8Array<ArrayBufferLike> ≠ BlobPart)
+    const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    return new Response(body as ArrayBuffer, {
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": `attachment; filename="${filename}"`,
@@ -36,6 +37,9 @@ export function catalogIoAdmin(ctx: AppContext) {
   });
 
   app.post("/api/admin/catalog/import/preview", async (c) => {
+    if (isRestoreBusy()) {
+      throw validationError("Hay una restauración en curso; espere a que termine");
+    }
     const form = await c.req.parseBody();
     const file = form.file;
     if (!(file instanceof File)) {
@@ -45,16 +49,16 @@ export function catalogIoAdmin(ctx: AppContext) {
       throw validationError("Archivo demasiado grande (máx. 8 MB)");
     }
     const buf = new Uint8Array(await file.arrayBuffer());
-    let sheets;
+    let sheets: ReturnType<typeof parseCatalogFile>;
     try {
       sheets = parseCatalogFile(file.name, buf);
     } catch (err) {
       throw validationError(err instanceof Error ? err.message : "No se pudo leer el archivo");
     }
-    const preview = previewCatalogImport(repos, sheets);
+    const preview = previewCatalogImport(ctx.repos, sheets);
     let token: string | null = null;
     if (preview.errors.length === 0 && (preview.creates.length > 0 || preview.updates.length > 0)) {
-      token = storeImportPlan(repos, preview.plan);
+      token = storeImportPlan(ctx.repos, preview.plan);
     }
     return c.json({
       creates: preview.creates,
@@ -70,29 +74,30 @@ export function catalogIoAdmin(ctx: AppContext) {
   });
 
   app.post("/api/admin/catalog/import/apply", async (c) => {
+    if (isRestoreBusy()) {
+      throw validationError("Hay una restauración en curso; espere a que termine");
+    }
     const body = (await c.req.json().catch(() => ({}))) as {
       confirm?: boolean;
       token?: string;
-      plan?: ImportPlan;
     };
     if (body.confirm !== true) {
       throw validationError("Se requiere confirm: true");
     }
-    let plan: ImportPlan | null = null;
-    if (typeof body.token === "string" && body.token) {
-      plan = loadImportPlan(repos, body.token);
-      if (!plan) throw validationError("Plan de importación expirado o inválido; vuelva a previsualizar");
-    } else if (body.plan) {
-      plan = body.plan;
+    if (typeof body.token !== "string" || !body.token) {
+      throw validationError("Se requiere token de la vista previa");
     }
-    if (!plan) throw validationError("Falta token o plan");
+    const plan = loadImportPlan(ctx.repos, body.token);
+    if (!plan) {
+      throw validationError("Plan de importación expirado o inválido; vuelva a previsualizar");
+    }
     if (plan.categories.length === 0 && plan.products.length === 0) {
       throw validationError("Plan vacío");
     }
 
-    const safetyBackup = backupBeforeImport(db, runtime.dataDir);
-    const result = applyCatalogImport(repos, plan);
-    if (typeof body.token === "string") clearImportPlan(repos, body.token);
+    const safetyBackup = backupBeforeImport(ctx.db, ctx.runtime.dataDir);
+    const result = applyCatalogImport(ctx.db, ctx.repos, plan);
+    clearImportPlan(ctx.repos, body.token);
 
     ctx.log.info("Importación de carta aplicada", {
       ...result,

@@ -10,15 +10,20 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
+  renameSync,
   rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { appSchemaVersion, migrate, readSchemaVersion } from "../db/migrate";
-import { ensureBackupsDir, preRestoreBackupFileName, vacuumInto } from "./backup";
+import { ensureBackupsDir } from "./backup";
+
+/** Solo hashes de 16 hex + opcional _t.webp (mismo criterio que /img). */
+const BACKUP_IMAGE_RE = /^[a-f0-9]{16}(_t)?\.webp$/i;
+/** Tope de bytes descomprimidos al leer un zip de restauración. */
+const MAX_UNCOMPRESSED_ZIP = 512 * 1024 * 1024;
 
 export type RestoreErrorCode = "NOT_FOUND" | "INVALID_BACKUP" | "NEWER_SCHEMA" | "BUSY" | "FAILED";
 
@@ -47,12 +52,19 @@ export type RestoreResult = {
 export type RestoreServiceOpts = {
   dataDir: string;
   getDb: () => Database;
+  /** Copia completa (.zip) del estado actual antes de restaurar. */
+  createSafetyBackup: () => { file: string };
   /** Opcional: no necesario con restauración por ATTACH. */
   replaceDatabase?: (next: Database) => void;
   log?: (level: "info" | "warn" | "error", msg: string, extra?: Record<string, unknown>) => void;
 };
 
 let busy = false;
+
+/** True mientras hay una restauración en curso (bloquea otras escrituras admin). */
+export function isRestoreBusy(): boolean {
+  return busy;
+}
 
 function sqlPath(absPath: string): string {
   return absPath.replace(/\\/g, "/").replace(/'/g, "''");
@@ -170,11 +182,37 @@ function preparePayload(dataDir: string, source: RestoreSource): PreparedPayload
   }
 }
 
+function isBackupImageEntry(normPath: string): string | null {
+  if (!normPath.startsWith("images/") || normPath.endsWith("/")) return null;
+  const rel = normPath.slice("images/".length);
+  // Sin subcarpetas ni path traversal; solo nombre de imagen válido
+  if (!rel || rel.includes("/") || rel.includes("\\") || rel.includes("..")) return null;
+  if (!BACKUP_IMAGE_RE.test(rel)) return null;
+  return rel.toLowerCase();
+}
+
 function extractZipToWork(zipPath: string, workDir: string, cleanup: () => void): PreparedPayload {
+  let plannedBytes = 0;
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(readFileSync(zipPath));
+    entries = unzipSync(readFileSync(zipPath), {
+      filter(file) {
+        const norm = file.name.replace(/\\/g, "/");
+        const keep = /(^|\/)menu\.db$/i.test(norm) || isBackupImageEntry(norm) != null;
+        if (!keep) return false;
+        const sz = typeof file.originalSize === "number" ? file.originalSize : (file.size ?? 0);
+        plannedBytes += sz;
+        if (plannedBytes > MAX_UNCOMPRESSED_ZIP) {
+          throw new RestoreError(
+            `ZIP demasiado grande al descomprimir (máx. ${Math.round(MAX_UNCOMPRESSED_ZIP / (1024 * 1024))} MB)`,
+            "INVALID_BACKUP",
+          );
+        }
+        return true;
+      },
+    });
   } catch (err) {
+    if (err instanceof RestoreError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     throw new RestoreError(`ZIP inválido: ${msg}`, "INVALID_BACKUP");
   }
@@ -189,11 +227,8 @@ function extractZipToWork(zipPath: string, workDir: string, cleanup: () => void)
 
   const images: Record<string, Uint8Array> = {};
   for (const [name, data] of Object.entries(entries)) {
-    const norm = name.replace(/\\/g, "/");
-    if (!norm.startsWith("images/") || norm.endsWith("/")) continue;
-    const rel = norm.slice("images/".length);
-    if (!rel || rel.includes("..")) continue;
-    images[rel] = data;
+    const rel = isBackupImageEntry(name.replace(/\\/g, "/"));
+    if (rel) images[rel] = data;
   }
 
   return {
@@ -203,23 +238,43 @@ function extractZipToWork(zipPath: string, workDir: string, cleanup: () => void)
   };
 }
 
+/**
+ * Escribe imágenes en carpeta temporal y hace rename atómico al final
+ * (no borra las actuales hasta tener las nuevas listas).
+ */
 function replaceImagesDir(dataDir: string, images: Record<string, Uint8Array>): void {
   const imagesDir = join(dataDir, "images");
-  if (existsSync(imagesDir)) {
-    for (const name of readdirSync(imagesDir)) {
+  const incoming = join(dataDir, `.images-incoming-${Date.now()}`);
+  const retired = join(dataDir, `.images-retired-${Date.now()}`);
+  mkdirSync(incoming, { recursive: true });
+  try {
+    for (const [rel, data] of Object.entries(images)) {
+      writeFileSync(join(incoming, rel), data);
+    }
+    if (existsSync(imagesDir)) {
+      renameSync(imagesDir, retired);
+    }
+    renameSync(incoming, imagesDir);
+  } catch (err) {
+    try {
+      rmSync(incoming, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+    // Si falló tras retirar la carpeta viva, intentar devolverla
+    if (!existsSync(imagesDir) && existsSync(retired)) {
       try {
-        rmSync(join(imagesDir, name), { recursive: true, force: true });
+        renameSync(retired, imagesDir);
       } catch {
         // ignore
       }
     }
-  } else {
-    mkdirSync(imagesDir, { recursive: true });
+    throw err;
   }
-  for (const [rel, data] of Object.entries(images)) {
-    const dest = join(imagesDir, rel);
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, data);
+  try {
+    rmSync(retired, { recursive: true, force: true });
+  } catch {
+    // se limpiará en la siguiente restauración
   }
 }
 
@@ -356,12 +411,6 @@ function applyBackupToLive(
     // ignore
   }
 
-  try {
-    live.clearQueryCache();
-  } catch {
-    // ignore
-  }
-
   return migrated;
 }
 
@@ -379,17 +428,10 @@ export function createRestoreService(opts: RestoreServiceOpts) {
         payload = preparePayload(opts.dataDir, source);
         const { schemaVersion } = validateBackupDbFile(payload.dbFile);
 
-        // Copia de seguridad del estado actual (RF-52)
-        const backupsDir = ensureBackupsDir(opts.dataDir);
-        let safetyFile = preRestoreBackupFileName();
-        let safetyPath = join(backupsDir, safetyFile);
-        if (existsSync(safetyPath)) {
-          const alt = new Date(Date.now() + 60_000);
-          safetyFile = preRestoreBackupFileName(alt);
-          safetyPath = join(backupsDir, safetyFile);
-        }
+        // Copia completa (db + imágenes) del estado actual (RF-52)
+        let safetyFile: string;
         try {
-          vacuumInto(opts.getDb(), safetyPath);
+          safetyFile = opts.createSafetyBackup().file;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           throw new RestoreError(`No se pudo crear la copia de seguridad: ${msg}`, "FAILED");
