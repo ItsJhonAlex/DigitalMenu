@@ -94,7 +94,6 @@ async function main() {
   if (await alreadyRunning(port)) {
     log.info(`Otra instancia activa en :${port}; no se arranca un segundo servidor`);
     closeDatabase(db);
-    await ensureDesktopShortcut();
     await openAdminIfRequested();
     log.close();
     return;
@@ -170,8 +169,8 @@ async function main() {
     log: (level, msg, extra) => log[level](msg, extra),
   }).start();
 
-  await ensureDesktopShortcut();
   await openAdminIfRequested();
+  void ensureDesktopShortcut();
 }
 
 function shutdown(signal: string) {

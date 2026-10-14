@@ -64,7 +64,6 @@ function openDefaultBrowser(url: string): boolean {
     if (process.platform === "win32") {
       Bun.spawn(["cmd", "/c", "start", "", url], {
         stdio: ["ignore", "ignore", "ignore"],
-        windowsHide: true,
       }).unref();
       return true;
     }
@@ -94,7 +93,6 @@ export async function openAdminInEdge(opts: {
     try {
       Bun.spawn([edge, `--app=${url}`, "--window-size=1280,760"], {
         stdio: ["ignore", "ignore", "ignore"],
-        windowsHide: true,
       }).unref();
       return { ok: true, edge, url };
     } catch (err) {
@@ -142,6 +140,7 @@ export async function ensureAdminDesktopShortcut(opts?: {
   const created: string[] = [];
   for (const desk of desktops) {
     const lnk = join(desk, ADMIN_SHORTCUT_NAME);
+    if (existsSync(lnk)) continue;
     const script = [
       "$ErrorActionPreference = 'Stop'",
       `$ws = New-Object -ComObject WScript.Shell`,
