@@ -63,6 +63,9 @@ async function compile(outfile: string, hideConsole: boolean): Promise<void> {
 await compile(prodOut, true);
 await compile(debugOut, false);
 
+// Restaurar stub versionado (el .exe ya embebó los assets en compile)
+await $`bun scripts/ensure-assets-stub.ts --force`;
+
 console.log(`OK: dist/MenuDigital.exe v${version}`);
 console.log(`OK: dist/MenuDigital-debug.exe v${version}`);
 console.log("Target: bun-windows-x64-baseline");

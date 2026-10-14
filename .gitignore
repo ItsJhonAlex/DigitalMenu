@@ -23,8 +23,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 
-# Generados
-src/server/assets.generated.ts
+# Generados (assets.generated.ts se versiona como stub; el build lo regenera en local)
 design/
 
 # Lockfiles ajenos (solo bun.lock)

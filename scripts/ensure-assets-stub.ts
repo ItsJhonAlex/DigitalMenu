@@ -27,7 +27,8 @@ function embeddedPathsExist(source: string): boolean {
 
 mkdirSync(dirname(GEN), { recursive: true });
 
-let write = !existsSync(GEN);
+const force = Bun.argv.includes("--force");
+let write = force || !existsSync(GEN);
 if (!write) {
   const cur = readFileSync(GEN, "utf8");
   write = !embeddedPathsExist(cur);
@@ -35,7 +36,7 @@ if (!write) {
 
 if (write) {
   writeFileSync(GEN, STUB, "utf8");
-  console.log("assets.generated.ts: stub (tests/CI)");
+  console.log(force ? "assets.generated.ts: stub (--force)" : "assets.generated.ts: stub (tests/CI)");
 } else {
   console.log("assets.generated.ts: OK");
 }

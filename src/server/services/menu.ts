@@ -52,15 +52,20 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
     return Math.floor(row.v);
   };
 
-  /** Incluye show_rate / show_images / textos, etc. para invalidar ETag y caché. */
+  /** Incluye valores de carta.* (no solo updated_at: dos writes en el mismo ms no bastan). */
   const cartaSettingsRev = (): string => {
-    const row = opts.db
+    const rows = opts.db
       .prepare(
-        `SELECT COALESCE(MAX(updated_at), '') AS t
-         FROM settings WHERE key LIKE 'carta.%'`,
+        `SELECT key, value FROM settings WHERE key LIKE 'carta.%' ORDER BY key`,
       )
-      .get() as { t: string };
-    return row.t;
+      .all() as Array<{ key: string; value: string }>;
+    if (rows.length === 0) return "0";
+    let h = 0;
+    for (const r of rows) {
+      const s = `${r.key}=${r.value}`;
+      for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    }
+    return `s${(h >>> 0).toString(36)}`;
   };
 
   const imageOf = (hash: string | null): MenuImage => {
