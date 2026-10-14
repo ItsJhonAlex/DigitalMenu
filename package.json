@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "bun --watch src/server/main.ts --data ./data --dev",
     "start": "bun src/server/main.ts --data ./data",
+    "admin": "bun src/server/main.ts --data ./data --open-admin --dev",
     "seed:demo": "bun scripts/seed-demo.ts --data ./data --force",
     "build:web": "bun build ./src/carta/main.ts ./src/admin/main.ts --outdir dist/web --minify --target browser --entry-naming [dir]/[name]-[hash].[ext] --chunk-naming [dir]/[name]-[hash].[ext] --asset-naming [dir]/[name]-[hash].[ext]",
     "build": "bun scripts/build.ts",

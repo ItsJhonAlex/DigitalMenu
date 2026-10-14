@@ -154,9 +154,18 @@ async function refreshNetworkChrome(): Promise<void> {
       if (net.ipChanged) {
         banner.hidden = false;
         clear(banner);
+        const from = net.previousIp ?? net.savedIp ?? "?";
+        const to = net.currentIp ?? "?";
         banner.append(
-          el("strong", { text: "La IP del POS cambió. " }),
-          document.createTextNode("Reimprima los QR o confirme la IP en Red y QR."),
+          el("strong", { text: "Cambio de IP. " }),
+          document.createTextNode(
+            `La IP del equipo cambió de ${from} a ${to}. Los QR impresos ya no funcionan. Configure la reserva de IP en el router o reimprima los QR. `,
+          ),
+          el("a", {
+            className: "banner__action",
+            text: "Usar nueva IP y reimprimir QR",
+            attrs: { href: "#/red" },
+          }),
         );
       } else {
         banner.hidden = true;

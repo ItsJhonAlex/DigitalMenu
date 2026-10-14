@@ -10,7 +10,7 @@ const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
 
 export function publicRoutes(ctx: AppContext) {
   const app = new Hono();
-  const menu = createMenuService({ db: ctx.db, repos: ctx.repos });
+  const menu = createMenuService({ repos: ctx.repos });
 
   app.get("/img/:name", (c) => {
     const name = c.req.param("name");

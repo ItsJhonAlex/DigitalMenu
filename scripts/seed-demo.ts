@@ -28,15 +28,24 @@ const DEMO_PRODUCTS: DemoProduct[] = [
     type: "comida",
     price: 1800,
     imageKey: "0",
-    es: { name: "Tostones rellenos", description: "Plátano verde frito con ropa vieja y salsa de ajo." },
-    en: { name: "Stuffed tostones", description: "Fried green plantain with shredded beef and garlic sauce." },
+    es: {
+      name: "Tostones rellenos",
+      description: "Plátano verde frito con ropa vieja y salsa de ajo.",
+    },
+    en: {
+      name: "Stuffed tostones",
+      description: "Fried green plantain with shredded beef and garlic sauce.",
+    },
   },
   {
     cat: "Entrantes",
     type: "comida",
     price: 2200,
     imageKey: "0",
-    es: { name: "Croquetas de jamón", description: "Crujientes, porción de 6 unidades con alioli." },
+    es: {
+      name: "Croquetas de jamón",
+      description: "Crujientes, porción de 6 unidades con alioli.",
+    },
     en: { name: "Ham croquettes", description: "Crispy, 6 pieces with aioli." },
   },
   {
@@ -45,8 +54,14 @@ const DEMO_PRODUCTS: DemoProduct[] = [
     price: 1600,
     available: false,
     imageKey: "0",
-    es: { name: "Ceviche de pescado", description: "Marinado en limón, cebolla morada y cilantro. Agotado hoy." },
-    en: { name: "Fish ceviche", description: "Marinated in lime, red onion and cilantro. Sold out today." },
+    es: {
+      name: "Ceviche de pescado",
+      description: "Marinado en limón, cebolla morada y cilantro. Agotado hoy.",
+    },
+    en: {
+      name: "Fish ceviche",
+      description: "Marinated in lime, red onion and cilantro. Sold out today.",
+    },
   },
   {
     cat: "Plato Fuerte",
@@ -54,7 +69,10 @@ const DEMO_PRODUCTS: DemoProduct[] = [
     price: 4500,
     imageKey: "1",
     es: { name: "Ropa vieja", description: "Carne desmechada en salsa criolla, arroz y maduros." },
-    en: { name: "Ropa vieja", description: "Shredded beef in creole sauce, rice and sweet plantain." },
+    en: {
+      name: "Ropa vieja",
+      description: "Shredded beef in creole sauce, rice and sweet plantain.",
+    },
   },
   {
     cat: "Plato Fuerte",
@@ -62,7 +80,10 @@ const DEMO_PRODUCTS: DemoProduct[] = [
     price: 5200,
     imageKey: "1",
     es: { name: "Pollo a la parrilla", description: "Pechuga marinada, vegetales asados y papas." },
-    en: { name: "Grilled chicken", description: "Marinated breast, roasted vegetables and potatoes." },
+    en: {
+      name: "Grilled chicken",
+      description: "Marinated breast, roasted vegetables and potatoes.",
+    },
   },
   {
     cat: "Plato Fuerte",
@@ -119,7 +140,10 @@ const DEMO_PRODUCTS: DemoProduct[] = [
     available: false,
     imageKey: "3",
     es: { name: "Daiquiri de fresa", description: "Ron blanco y fresas. Temporalmente agotado." },
-    en: { name: "Strawberry daiquiri", description: "White rum and strawberries. Temporarily sold out." },
+    en: {
+      name: "Strawberry daiquiri",
+      description: "White rum and strawberries. Temporarily sold out.",
+    },
   },
   {
     cat: "Bebidas",

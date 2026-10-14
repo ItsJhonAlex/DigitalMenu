@@ -100,11 +100,15 @@ jobs:
           Copy-Item dist/MenuDigital-debug.exe "release-assets/MenuDigital-debug-$TAG.exe"
           Copy-Item dist/MenuDigital.exe release-assets/MenuDigital.exe
           Copy-Item dist/MenuDigital-debug.exe release-assets/MenuDigital-debug.exe
+          Copy-Item scripts/install.ps1 release-assets/install.ps1
+          Copy-Item scripts/uninstall.ps1 release-assets/uninstall.ps1
           $files = @(
             "MenuDigital-$TAG.exe",
             "MenuDigital-debug-$TAG.exe",
             "MenuDigital.exe",
-            "MenuDigital-debug.exe"
+            "MenuDigital-debug.exe",
+            "install.ps1",
+            "uninstall.ps1"
           )
           $lines = foreach ($f in $files) {
             $hash = (Get-FileHash -Algorithm SHA256 "release-assets/$f").Hash.ToLowerInvariant()
@@ -143,13 +147,14 @@ jobs:
 
             | Archivo | Uso |
             |---------|-----|
-            | `MenuDigital.exe` | Producción (sin consola) |
-            | `MenuDigital-debug.exe` | Diagnóstico (consola visible) |
+            | `MenuDigital.exe` | Producción (sin consola, sin sourcemap) |
+            | `MenuDigital-debug.exe` | Diagnóstico en el POS (consola + sourcemap); **sí se publica** |
             | `MenuDigital-${{ steps.ver.outputs.tag }}.exe` | Mismo binario, nombre versionado |
             | `MenuDigital-debug-${{ steps.ver.outputs.tag }}.exe` | Debug versionado |
+            | `install.ps1` / `uninstall.ps1` | Instalación POS (autoarranque) |
             | `SHA256SUMS.txt` | Checksums |
 
-            **Instalación / actualización:** copiar solo el `.exe` a `C:\MenuDigital\` (no tocar `data\`).
+            **Instalación / actualización:** `install.ps1` o copiar el `.exe` a `C:\MenuDigital\` (no tocar `data\`). El debug es opcional.
 
             Target: `bun-windows-x64-baseline` · Bun 1.4.3
           files: |
@@ -157,6 +162,8 @@ jobs:
             release-assets/MenuDigital-debug.exe
             release-assets/MenuDigital-${{ steps.ver.outputs.tag }}.exe
             release-assets/MenuDigital-debug-${{ steps.ver.outputs.tag }}.exe
+            release-assets/install.ps1
+            release-assets/uninstall.ps1
             release-assets/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -37,11 +37,25 @@ export function createSettingsRepo(db: Database) {
     listPublicCarta(): SettingRow[] {
       return this.listByPrefix("carta.");
     },
+    getMenuRevision(): number {
+      const n = this.getJson<number>("menu.revision", 0);
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+    },
+    /** Sube la revisión de la carta (invalida caché/ETag de /api/menu). */
+    bumpMenuRevision(): number {
+      const next = this.getMenuRevision() + 1;
+      upsertStmt.run("menu.revision", JSON.stringify(next));
+      return next;
+    },
     setJson(key: string, value: unknown): void {
       upsertStmt.run(key, JSON.stringify(value));
+      // Cualquier setting (salvo la propia rev) invalida la carta en caliente
+      if (key !== "menu.revision") this.bumpMenuRevision();
     },
     remove(key: string): boolean {
-      return deleteStmt.run(key).changes > 0;
+      const changed = deleteStmt.run(key).changes > 0;
+      if (changed && key !== "menu.revision") this.bumpMenuRevision();
+      return changed;
     },
   };
 }

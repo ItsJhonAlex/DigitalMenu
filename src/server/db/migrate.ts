@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { ensureBackupsDir, preMigrationBackupFileName, vacuumInto } from "../services/backup";
 import initSql from "./migrations/001_init.sql" with { type: "text" };
 import seedSql from "./migrations/002_seed.sql" with { type: "text" };
 
@@ -86,26 +87,20 @@ function backupBeforeMigrate(
   nextVersion: number,
   log: (msg: string) => void,
 ): void {
-  const backupsDir = join(dataDir, "backups");
-  if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true });
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const dest = join(
-    backupsDir,
-    `pre-migracion-${String(nextVersion).padStart(3, "0")}-${stamp}.db`,
-  );
+  const backupsDir = ensureBackupsDir(dataDir);
+  // T11: FILE_RE + hora local → pre-migracion-NNN-AAAAMMDD-HHMM.db
+  const file = preMigrationBackupFileName(nextVersion);
+  const dest = join(backupsDir, file);
 
   try {
-    // VACUUM INTO: rutas con / evitan líos con \ en Windows
-    const destSql = dest.replace(/\\/g, "/").replace(/'/g, "''");
-    db.exec(`VACUUM INTO '${destSql}'`);
-    log(`Copia previa a migración: ${dest}`);
+    vacuumInto(db, dest);
+    log(`Copia previa a migración: ${file}`);
   } catch {
     // BD vacía / sin páginas: fallback a copiar el archivo si existe
     const source = join(dataDir, "menu.db");
     if (existsSync(source)) {
       copyFileSync(source, dest);
-      log(`Copia previa (copyFile): ${dest}`);
+      log(`Copia previa (copyFile): ${file}`);
     } else {
       log("Sin copia previa (BD nueva)");
     }

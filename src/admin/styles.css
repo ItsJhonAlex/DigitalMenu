@@ -219,9 +219,19 @@ textarea {
   margin: 0.75rem 1.35rem 0;
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
-  background: #fff4e5;
-  color: #7c2d12;
-  border: 1px solid #fdba74;
+  background: #fef2f2;
+  color: #7f1d1d;
+  border: 1px solid #fca5a5;
+  line-height: 1.45;
+}
+.banner__action {
+  color: #991b1b;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.banner__action:hover {
+  color: #450a0a;
 }
 
 /* —— Cards / layout —— */

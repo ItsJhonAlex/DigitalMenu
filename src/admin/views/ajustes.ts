@@ -178,4 +178,120 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
       ],
     }),
   );
+
+  // RF-50 / RF-51 — Copias de seguridad
+  type BackupList = {
+    items: Array<{ file: string; kind: string; bytes: number; createdAt: string }>;
+    lastAutoAt: string | null;
+    keepDaily: number;
+    hour?: number;
+  };
+
+  const backupCard = el("div", { className: "card stack" });
+  root.appendChild(backupCard);
+
+  const formatBytes = (n: number) => {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const renderBackups = async () => {
+    clear(backupCard);
+    backupCard.appendChild(el("h2", { className: "card__title", text: "Copias de seguridad" }));
+
+    let data: BackupList;
+    try {
+      data = await api.get<BackupList>("/api/admin/backups");
+    } catch (err) {
+      backupCard.appendChild(
+        el("p", {
+          className: "muted",
+          text: err instanceof Error ? err.message : "No se pudieron listar las copias",
+        }),
+      );
+      return;
+    }
+
+    backupCard.appendChild(
+      el("p", {
+        className: "muted",
+        text: `Automática: conserva ${data.keepDaily} (hora ${String(data.hour ?? 4).padStart(2, "0")}:00). ${
+          data.lastAutoAt
+            ? `Última: ${new Date(data.lastAutoAt).toLocaleString()}`
+            : "Aún no hay copia automática."
+        }`,
+      }),
+    );
+
+    const btnRow = el("div", { className: "row" });
+    const btnDb = el("button", {
+      className: "btn",
+      text: "Crear copia ahora",
+      attrs: { type: "button" },
+    });
+    const btnFull = el("button", {
+      className: "btn btn--primary",
+      text: "Exportar copia completa (.zip)",
+      attrs: { type: "button" },
+    });
+    btnRow.append(btnDb, btnFull);
+    backupCard.appendChild(btnRow);
+
+    const runCreate = async (kind: "db" | "full") => {
+      btnDb.setAttribute("disabled", "true");
+      btnFull.setAttribute("disabled", "true");
+      try {
+        const res = await api.post<{ file: string; bytes: number }>("/api/admin/backups", { kind });
+        showToast(
+          kind === "full"
+            ? `Exportada ${res.file} (${formatBytes(res.bytes)})`
+            : `Copia ${res.file} (${formatBytes(res.bytes)})`,
+          "success",
+        );
+        // Ofrecer descarga inmediata
+        const a = document.createElement("a");
+        a.href = `/api/admin/backups/${encodeURIComponent(res.file)}`;
+        a.download = res.file;
+        a.click();
+        await renderBackups();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Error al crear copia", "error");
+        btnDb.removeAttribute("disabled");
+        btnFull.removeAttribute("disabled");
+      }
+    };
+    btnDb.addEventListener("click", () => void runCreate("db"));
+    btnFull.addEventListener("click", () => void runCreate("full"));
+
+    if (data.items.length === 0) {
+      backupCard.appendChild(
+        el("p", { className: "muted", text: "No hay copias en backups\\ todavía." }),
+      );
+      return;
+    }
+
+    const list = el("ul", { className: "stack" });
+    for (const item of data.items.slice(0, 20)) {
+      const li = el("li", { className: "row" });
+      li.append(
+        el("span", {
+          text: `${item.file} · ${formatBytes(item.bytes)} · ${new Date(item.createdAt).toLocaleString()}`,
+        }),
+      );
+      const dl = el("a", {
+        className: "btn btn--ghost",
+        text: "Descargar",
+        attrs: {
+          href: `/api/admin/backups/${encodeURIComponent(item.file)}`,
+          download: item.file,
+        },
+      });
+      li.appendChild(dl);
+      list.appendChild(li);
+    }
+    backupCard.appendChild(list);
+  };
+
+  void renderBackups();
 }

@@ -1,62 +1,55 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AppContext } from "../../app";
 import { notFound } from "../../http/errors";
 import { requireObject, validationError } from "../../http/validate";
+import { BACKUP_FILE_RE, createBackupService } from "../../services/backup";
 import { createAdminRouter } from "./base";
-
-const FILE_RE = /^(menu|full|pre-[a-z0-9-]+)-\d{8}-\d{4}\.(db|zip)$/i;
 
 export function backupsAdmin(ctx: AppContext) {
   const app = createAdminRouter(ctx);
-  const backupsDir = join(ctx.runtime.dataDir, "backups");
-  if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true });
+
+  const backups = createBackupService({
+    dataDir: ctx.runtime.dataDir,
+    db: ctx.db,
+    keepDaily: ctx.runtime.config.backup.keepDaily,
+    hour: ctx.runtime.config.backup.hour,
+    getLastAutoAt: () => ctx.repos.settings.getJson<string | null>("backup.last_at", null),
+    setLastAutoAt: (iso) => ctx.repos.settings.setJson("backup.last_at", iso),
+    log: (level, msg, extra) => ctx.log[level](msg, extra),
+  });
 
   app.get("/api/admin/backups", (c) => {
-    const items = readdirSync(backupsDir)
-      .filter((f) => f.endsWith(".db") || f.endsWith(".zip"))
-      .map((file) => {
-        const st = statSync(join(backupsDir, file));
-        const kind = file.startsWith("full") ? "full" : "db";
-        return {
-          file,
-          kind,
-          bytes: st.size,
-          createdAt: st.mtime.toISOString(),
-        };
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
     return c.json({
-      items,
+      items: backups.list().map(({ file, kind, bytes, createdAt }) => ({
+        file,
+        kind: kind === "full" ? "full" : "db",
+        bytes,
+        createdAt,
+      })),
       lastAutoAt: ctx.repos.settings.getJson<string | null>("backup.last_at", null),
       keepDaily: ctx.runtime.config.backup.keepDaily,
+      hour: ctx.runtime.config.backup.hour,
     });
   });
 
   app.post("/api/admin/backups", async (c) => {
     const body = requireObject(await c.req.json().catch(() => ({ kind: "db" })));
     const kind = body.kind === "full" ? "full" : "db";
-    if (kind === "full") {
-      // Zip completo llega en F4; por ahora solo BD
-      throw validationError("Copia full aún no implementada (F4); use kind=db");
+    try {
+      const result = kind === "full" ? backups.createFullZip() : backups.createDailyDb();
+      return c.json({ file: result.file, bytes: result.bytes, kind }, 201);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.log.error("Error al crear copia", { kind, msg });
+      throw validationError(`No se pudo crear la copia: ${msg}`);
     }
-    const stamp = new Date()
-      .toISOString()
-      .replace(/[-:TZ.]/g, "")
-      .slice(0, 12);
-    const file = `menu-${stamp.slice(0, 8)}-${stamp.slice(8, 12)}.db`;
-    const dest = join(backupsDir, file).replace(/\\/g, "/");
-    ctx.db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
-    const bytes = statSync(join(backupsDir, file)).size;
-    ctx.repos.settings.setJson("backup.last_at", new Date().toISOString());
-    return c.json({ file, bytes }, 201);
   });
 
   app.get("/api/admin/backups/:file", (c) => {
     const file = c.req.param("file");
-    if (!FILE_RE.test(file)) throw validationError("Nombre de archivo inválido");
-    const path = join(backupsDir, file);
+    if (!BACKUP_FILE_RE.test(file)) throw validationError("Nombre de archivo inválido");
+    const path = join(backups.backupsDir(), file);
     if (!existsSync(path)) throw notFound("Copia no encontrada");
     const bunFile = Bun.file(path);
     return new Response(bunFile, {
@@ -73,7 +66,7 @@ export function backupsAdmin(ctx: AppContext) {
     if (body.confirm !== true) {
       throw validationError("Se requiere confirm: true");
     }
-    // Restauración completa en F4
+    // Restauración completa en F4 / RF-52
     throw validationError("Restauración pendiente de F4 (backup.ts completo)");
   });
 

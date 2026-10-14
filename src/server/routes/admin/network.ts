@@ -2,7 +2,7 @@ import { type WifiSecurity, wifiPayload } from "../../../shared/wifi";
 import type { AppContext } from "../../app";
 import { conflict } from "../../http/errors";
 import { requireObject, requireString, validationError } from "../../http/validate";
-import { listLanCandidates } from "../../services/network";
+import { evaluateIpChange, isPrivateLanIpv4, listLanCandidates } from "../../services/network";
 import { makeQrSvg } from "../../services/qr";
 import { createAdminRouter } from "./base";
 
@@ -13,26 +13,40 @@ export function networkAdmin(ctx: AppContext) {
   app.get("/api/admin/network", (c) => {
     const candidates = listLanCandidates();
     const savedIp = repos.settings.getJson<string | null>("network.carta_ip", null);
-    const recommended =
-      candidates.find((x) => x.recommended)?.address ?? candidates[0]?.address ?? null;
-    const currentIp =
-      savedIp && candidates.some((c) => c.address === savedIp) ? savedIp : recommended;
-    const ipChanged = Boolean(savedIp && currentIp && savedIp !== currentIp);
+    const evaled = evaluateIpChange({ savedIp, candidates });
+    const ipChanged = evaled.ipChanged;
+    const currentIp = evaled.currentIp;
     const port = runtime.config.port;
     return c.json({
       port,
       savedIp,
       ipChanged,
-      ...(ipChanged ? { previousIp: savedIp, currentIp } : {}),
+      ...(ipChanged
+        ? {
+            previousIp: evaled.previousIp ?? savedIp,
+            currentIp,
+          }
+        : {}),
       candidates,
-      cartaUrl: currentIp ? `http://${currentIp}:${port}/` : null,
+      // Hasta confirmar nueva IP, la URL refleja la guardada (QR impresos)
+      cartaUrl: savedIp
+        ? `http://${savedIp}:${port}/`
+        : currentIp
+          ? `http://${currentIp}:${port}/`
+          : null,
       checkedAt: new Date().toISOString(),
     });
   });
 
   app.put("/api/admin/network", async (c) => {
     const body = requireObject(await c.req.json());
-    const cartaIp = requireString(body.cartaIp, "cartaIp");
+    const cartaIp = requireString(body.cartaIp, "cartaIp").trim();
+    if (!isPrivateLanIpv4(cartaIp)) {
+      throw validationError(
+        "cartaIp debe ser IPv4 de red local (10/8, 172.16–31/12 o 192.168/16)",
+        [{ field: "cartaIp", issue: "format" }],
+      );
+    }
     repos.settings.setJson("network.carta_ip", cartaIp);
     repos.settings.setJson("network.ip_changed", false);
     return c.json({ ok: true, cartaIp });

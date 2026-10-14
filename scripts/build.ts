@@ -35,37 +35,52 @@ if (!existsSync(ICON)) {
 const prodOut = join(DIST, "MenuDigital.exe");
 const debugOut = join(DIST, "MenuDigital-debug.exe");
 
-async function compile(outfile: string, hideConsole: boolean): Promise<void> {
+/**
+ * Producción: sin --sourcemap (binario más pequeño; el POS no necesita stacks).
+ * Debug: con --sourcemap y consola visible — sí se publica en el Release (diagnóstico POS).
+ */
+async function compile(
+  outfile: string,
+  opts: { hideConsole: boolean; sourcemap: boolean },
+): Promise<void> {
   const args = [
     "build",
     join(ROOT, "src", "server", "main.ts"),
     "--compile",
     "--target=bun-windows-x64-baseline",
     "--minify",
-    "--sourcemap",
+    ...(opts.sourcemap ? ["--sourcemap"] : []),
     "--define",
     define,
-    ...(hideConsole ? ["--windows-hide-console"] : []),
+    ...(opts.hideConsole ? ["--windows-hide-console"] : []),
     ...iconArgs,
     "--outfile",
     outfile,
   ];
   console.log(
-    hideConsole
-      ? "Compilando MenuDigital.exe (sin consola)…"
-      : "Compilando MenuDigital-debug.exe (con consola)…",
+    opts.hideConsole
+      ? "Compilando MenuDigital.exe (sin consola, sin sourcemap)…"
+      : "Compilando MenuDigital-debug.exe (consola + sourcemap)…",
   );
   const proc = Bun.spawn(["bun", ...args], { stdout: "inherit", stderr: "inherit", cwd: ROOT });
   const code = await proc.exited;
   if (code !== 0) throw new Error(`bun build falló (${code}) para ${outfile}`);
 }
 
-await compile(prodOut, true);
-await compile(debugOut, false);
+await compile(prodOut, { hideConsole: true, sourcemap: false });
+await compile(debugOut, { hideConsole: false, sourcemap: true });
 
 // Restaurar stub versionado (el .exe ya embebó los assets en compile)
 await $`bun scripts/ensure-assets-stub.ts --force`;
 
+// Scripts de instalación POS (09 §3 / T7) junto al .exe
+for (const name of ["install.ps1", "uninstall.ps1"] as const) {
+  const src = join(ROOT, "scripts", name);
+  const dest = join(ROOT, "dist", name);
+  await Bun.write(dest, await Bun.file(src).arrayBuffer());
+}
+
 console.log(`OK: dist/MenuDigital.exe v${version}`);
 console.log(`OK: dist/MenuDigital-debug.exe v${version}`);
+console.log("OK: dist/install.ps1, dist/uninstall.ps1");
 console.log("Target: bun-windows-x64-baseline");

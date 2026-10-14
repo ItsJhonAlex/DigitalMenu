@@ -1,4 +1,4 @@
-import { api, type Language } from "../api";
+import { type Language, api } from "../api";
 import { clear, el } from "../dom";
 import { openModal } from "../modal";
 import { showToast } from "../toast";
@@ -71,10 +71,7 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
     wrap.appendChild(
       el("div", {
         className: "row row--between",
-        children: [
-          el("p", { className: "muted", text: "Progreso de traducciones" }),
-          add,
-        ],
+        children: [el("p", { className: "muted", text: "Progreso de traducciones" }), add],
       }),
     );
 

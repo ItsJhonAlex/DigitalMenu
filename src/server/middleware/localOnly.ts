@@ -4,8 +4,8 @@ import { getConnInfo } from "hono/bun";
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 /**
- * Guardia Admin: IP loopback + Host + Origin en escrituras (RF-02, ADR-08).
- * En modo `dev` solo exige IP loopback (permite herramientas locales).
+ * Guardia Admin: IP loopback + Host + Origin en escrituras (RF-02, ADR-08, RNF-20).
+ * En modo `dev` solo relaja Host/IP (permite herramientas locales / app.request).
  */
 export const localOnly = (port: number, opts: { looseHost?: boolean } = {}): MiddlewareHandler => {
   return async (c, next) => {
@@ -23,16 +23,14 @@ export const localOnly = (port: number, opts: { looseHost?: boolean } = {}): Mid
 
     if (!opts.looseHost) {
       const host = (c.req.header("host") ?? "").toLowerCase();
-      const okHost = host === `localhost:${port}` || host === `127.0.0.1:${port}`;
-      if (!okHost) return c.text("Forbidden", 403);
+      if (!isAllowedAdminHost(host, port)) return c.text("Forbidden", 403);
     }
 
     if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
       const origin = c.req.header("origin");
-      if (origin) {
-        const okOrigin =
-          origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}`;
-        if (!okOrigin) return c.text("Forbidden", 403);
+      const secFetchSite = c.req.header("sec-fetch-site");
+      if (!isWriteOriginAllowed({ origin, secFetchSite, port })) {
+        return c.text("Forbidden", 403);
       }
     }
 
@@ -48,4 +46,23 @@ export function isLoopbackIp(ip: string): boolean {
 export function isAllowedAdminHost(host: string, port: number): boolean {
   const h = host.toLowerCase();
   return h === `localhost:${port}` || h === `127.0.0.1:${port}`;
+}
+
+export function isAllowedAdminOrigin(origin: string, port: number): boolean {
+  return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}`;
+}
+
+/**
+ * Escrituras: Origin válido, o sin Origin solo si Sec-Fetch-Site es same-origin.
+ * Sin Origin y sin same-origin → rechazo (CSRF / fetch cross-site).
+ */
+export function isWriteOriginAllowed(opts: {
+  origin: string | undefined | null;
+  secFetchSite: string | undefined | null;
+  port: number;
+}): boolean {
+  const origin = opts.origin?.trim() || "";
+  if (origin) return isAllowedAdminOrigin(origin, opts.port);
+  const site = (opts.secFetchSite ?? "").toLowerCase();
+  return site === "same-origin";
 }

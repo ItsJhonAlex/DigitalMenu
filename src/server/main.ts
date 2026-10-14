@@ -5,6 +5,10 @@ import { closeDatabase, openDatabase } from "./db";
 import { migrate } from "./db/migrate";
 import { createRepos } from "./db/repos";
 import { createLogger } from "./logger";
+import { createBackupService } from "./services/backup";
+import { ensureAdminDesktopShortcut, openAdminInEdge, waitForHealth } from "./services/edge";
+import { isAddressInUseError, portInUseDialog, showErrorMessageBox } from "./services/native";
+import { createIpWatcher } from "./services/network";
 
 const runtime = loadRuntime();
 const log = createLogger({
@@ -34,13 +38,6 @@ try {
 }
 
 const repos = createRepos(db);
-// Marca del restaurante (sustituye el placeholder del seed antiguo)
-{
-  const restaurantName = repos.settings.getJson<string | null>("carta.restaurant_name", null);
-  if (restaurantName === "Mi Restaurante") {
-    repos.settings.setJson("carta.restaurant_name", "Avanzar In Time");
-  }
-}
 const ctx = { runtime, log, startedAt, db, repos };
 const app = createApp(ctx);
 
@@ -57,15 +54,48 @@ async function alreadyRunning(port: number): Promise<boolean> {
   }
 }
 
+async function openAdminIfRequested(): Promise<void> {
+  if (!runtime.openAdmin) return;
+  const port = runtime.config.port;
+  const ready = await waitForHealth(port);
+  if (!ready) {
+    log.warn("No se pudo abrir el Admin: /api/health no respondió a tiempo");
+    return;
+  }
+  const opened = await openAdminInEdge({
+    port,
+    edgePath: runtime.config.edgePath,
+  });
+  if (opened.ok) {
+    log.info("Admin abierto en Edge modo app", { url: opened.url, edge: opened.edge });
+  } else {
+    log.warn("No se pudo lanzar Edge", { reason: opened.reason });
+  }
+}
+
+async function ensureDesktopShortcut(): Promise<void> {
+  try {
+    const result = await ensureAdminDesktopShortcut();
+    if (result.created.length > 0) {
+      log.info("Acceso directo Admin en escritorio", { paths: result.created });
+    } else if (result.skipped) {
+      log.info("Acceso directo Admin no creado", { reason: result.skipped });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn("No se pudo crear el acceso directo del Admin", { msg });
+  }
+}
+
 async function main() {
   const { port, host } = runtime.config;
 
   if (await alreadyRunning(port)) {
     log.info(`Otra instancia activa en :${port}; no se arranca un segundo servidor`);
     closeDatabase(db);
-    if (runtime.openAdmin) {
-      log.info("Flag --open-admin: Edge aún no implementado (F2)");
-    }
+    await ensureDesktopShortcut();
+    await openAdminIfRequested();
+    log.close();
     return;
   }
 
@@ -78,8 +108,26 @@ async function main() {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.error(`No se pudo escuchar en ${host}:${port}`, { msg });
     closeDatabase(db);
+    if (isAddressInUseError(err)) {
+      // RF-04: puerto ocupado por otro programa → log + MessageBox + exit ≠ 0
+      const dialog = portInUseDialog({
+        port,
+        host,
+        dataDir: runtime.dataDir,
+        detail: msg,
+      });
+      log.error(`Puerto ${port} ocupado por otro programa (RF-04)`, {
+        host,
+        port,
+        msg,
+      });
+      log.close();
+      showErrorMessageBox(dialog.title, dialog.body);
+      process.exit(1);
+    }
+    log.error(`No se pudo escuchar en ${host}:${port}`, { msg });
+    log.close();
     process.exit(1);
   }
 
@@ -93,9 +141,35 @@ async function main() {
     categories: repos.categories.list().length,
   });
 
-  if (runtime.openAdmin) {
-    log.info("Flag --open-admin: Edge aún no implementado (F2)");
+  // RF-50: copia diaria al arrancar si > 24 h, y a la hora configurada
+  const backups = createBackupService({
+    dataDir: runtime.dataDir,
+    db,
+    keepDaily: runtime.config.backup.keepDaily,
+    hour: runtime.config.backup.hour,
+    getLastAutoAt: () => repos.settings.getJson<string | null>("backup.last_at", null),
+    setLastAutoAt: (iso) => repos.settings.setJson("backup.last_at", iso),
+    log: (level, msg, extra) => log[level](msg, extra),
+  });
+  try {
+    backups.maybeCreateScheduled("startup");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error("Fallo en copia diaria al arrancar", { msg });
   }
+  backups.startDailyScheduler();
+
+  // RF-37: comprobar IP al arrancar y cada 60 s
+  createIpWatcher({
+    getSavedIp: () => repos.settings.getJson<string | null>("network.carta_ip", null),
+    getFlag: () => repos.settings.getJson<boolean>("network.ip_changed", false),
+    setFlag: (changed) => repos.settings.setJson("network.ip_changed", changed),
+    intervalMs: 60_000,
+    log: (level, msg, extra) => log[level](msg, extra),
+  }).start();
+
+  await ensureDesktopShortcut();
+  await openAdminIfRequested();
 }
 
 function shutdown(signal: string) {

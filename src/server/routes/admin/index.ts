@@ -4,6 +4,7 @@ import { hasEmbeddedAssets, serveEmbedded } from "../../assets";
 import { HttpError, errorJson } from "../../http/errors";
 import { adminPin } from "../../middleware/adminPin";
 import { localOnly } from "../../middleware/localOnly";
+import { requireJsonWrites } from "../../middleware/requireJson";
 import { backupsAdmin } from "./backups";
 import { categoriesAdmin } from "./categories";
 import { currenciesAdmin } from "./currencies";
@@ -23,10 +24,19 @@ export function adminRoutes(ctx: AppContext) {
   app.use("/api/admin/*", localOnly(port, { looseHost: ctx.runtime.dev }));
   app.use("/admin/*", localOnly(port, { looseHost: ctx.runtime.dev }));
   app.use("/admin", localOnly(port, { looseHost: ctx.runtime.dev }));
+  app.use("/api/admin/*", requireJsonWrites());
   app.use("/api/admin/*", adminPin());
   app.use("/api/admin/*", async (c, next) => {
     await next();
     c.header("Cache-Control", "no-store");
+    const method = c.req.method;
+    if (
+      (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") &&
+      c.res.status < 400
+    ) {
+      // Cada escritura del admin invalida caché/ETag de /api/menu
+      ctx.repos.settings.bumpMenuRevision();
+    }
   });
 
   app.onError((err, c) => {

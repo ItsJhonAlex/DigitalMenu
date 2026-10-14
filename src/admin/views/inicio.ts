@@ -1,7 +1,7 @@
-import { api, type Currency, type Product } from "../api";
+import { type Currency, type Product, api } from "../api";
+import { BRAND } from "../brand";
 import { clear, el, formatRateUpdated, nameOf } from "../dom";
 import { showToast } from "../toast";
-import { BRAND } from "../brand";
 
 export async function renderInicio(root: HTMLElement): Promise<void> {
   const [currencies, products, settings, diag, net] = await Promise.all([
@@ -33,7 +33,9 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
   const ratesCard = el("section", { className: "card stack" });
   ratesCard.appendChild(el("h2", { className: "card__title", text: "Tasa del día" }));
   if (others.length === 0) {
-    ratesCard.appendChild(el("p", { className: "muted", text: "No hay monedas secundarias activas." }));
+    ratesCard.appendChild(
+      el("p", { className: "muted", text: "No hay monedas secundarias activas." }),
+    );
   }
   for (const cur of others) {
     const row = el("div", { className: "row" });

@@ -14,6 +14,8 @@ import { payloadTooLarge, unsupportedMedia, validationError } from "../http/erro
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const HASH_RE = /^[a-f0-9]{16}$/;
+/** No borrar huérfanas recién subidas (aún sin asociar a producto/categoría). */
+const ORPHAN_GRACE_MS = 10 * 60 * 1000;
 
 function isWebp(buf: Uint8Array): boolean {
   return (
@@ -96,7 +98,20 @@ export function createImagesService(opts: { dataDir: string; db: Database }) {
       return set;
     },
 
-    listOrphans(): { items: string[]; bytes: number } {
+    /** true si el par large/thumb tiene más de ORPHAN_GRACE_MS (mtime más reciente). */
+    olderThanGrace(hash: string, now = Date.now()): boolean {
+      let newest = 0;
+      for (const name of [`${hash}.webp`, `${hash}_t.webp`]) {
+        const p = join(imagesDir, name);
+        if (!existsSync(p)) continue;
+        newest = Math.max(newest, statSync(p).mtimeMs);
+      }
+      if (newest === 0) return true;
+      return now - newest >= ORPHAN_GRACE_MS;
+    },
+
+    listOrphans(opts?: { now?: number }): { items: string[]; bytes: number } {
+      const now = opts?.now ?? Date.now();
       const used = this.referencedHashes();
       const files = readdirSync(imagesDir).filter((f) => f.endsWith(".webp"));
       const hashes = new Set<string>();
@@ -106,6 +121,7 @@ export function createImagesService(opts: { dataDir: string; db: Database }) {
         if (!m?.[1]) continue;
         const hash = m[1];
         if (used.has(hash)) continue;
+        if (!this.olderThanGrace(hash, now)) continue;
         if (!hashes.has(hash)) {
           hashes.add(hash);
         }
@@ -114,19 +130,22 @@ export function createImagesService(opts: { dataDir: string; db: Database }) {
       return { items: [...hashes], bytes };
     },
 
-    deleteOrphans(): number {
-      const { items } = this.listOrphans();
+    /** Número de imágenes (hashes) borradas, no de archivos .webp. */
+    deleteOrphans(opts?: { now?: number }): number {
+      const { items } = this.listOrphans(opts);
       let deleted = 0;
       for (const hash of items) {
+        let removedAny = false;
         for (const name of [`${hash}.webp`, `${hash}_t.webp`]) {
           const p = join(imagesDir, name);
           if (existsSync(p)) {
             unlinkSync(p);
-            deleted++;
+            removedAny = true;
           }
         }
+        if (removedAny) deleted++;
       }
-      return items.length;
+      return deleted;
     },
 
     assertHashExists(hash: string | null | undefined) {

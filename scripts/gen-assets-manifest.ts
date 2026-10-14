@@ -3,7 +3,7 @@
  * con imports `with { type: "file" }` para embeberlos en el .exe.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 
@@ -136,7 +136,7 @@ function main(): void {
 
   const lines: string[] = [
     "/** GENERADO por scripts/gen-assets-manifest.ts — no editar. */",
-    "// @ts-nocheck — imports `with { type: \"file\" }` (Bun embed)",
+    '// @ts-nocheck — imports `with { type: "file" }` (Bun embed)',
     "",
   ];
   for (const e of entries) {

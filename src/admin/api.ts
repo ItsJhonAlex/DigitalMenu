@@ -35,10 +35,7 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message, details);
 }
 
-async function request<T>(
-  path: string,
-  init: RequestInit & { json?: unknown } = {},
-): Promise<T> {
+async function request<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   let body = init.body;
@@ -57,9 +54,10 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, json?: unknown) => request<T>(path, { method: "POST", json }),
-  put: <T>(path: string, json?: unknown) => request<T>(path, { method: "PUT", json }),
-  patch: <T>(path: string, json?: unknown) => request<T>(path, { method: "PATCH", json }),
+  /** Sin cuerpo → `{}` + Content-Type JSON (evita 415 en POST vacíos, p. ej. reset-availability). */
+  post: <T>(path: string, json: unknown = {}) => request<T>(path, { method: "POST", json }),
+  put: <T>(path: string, json: unknown = {}) => request<T>(path, { method: "PUT", json }),
+  patch: <T>(path: string, json: unknown = {}) => request<T>(path, { method: "PATCH", json }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 

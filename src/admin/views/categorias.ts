@@ -1,4 +1,4 @@
-import { api, type Category, type I18nMap } from "../api";
+import { type Category, type I18nMap, api } from "../api";
 import { clear, el, nameOf } from "../dom";
 import { openModal } from "../modal";
 import { showToast } from "../toast";
@@ -15,7 +15,10 @@ function i18nForm(initial: I18nMap = { es: { name: "" } }): {
   let active = "es";
   const root = el("div", { className: "stack" });
   const tabs = el("div", { className: "tabs" });
-  const nameInput = el("input", { className: "input", attrs: { maxlength: "80" } }) as HTMLInputElement;
+  const nameInput = el("input", {
+    className: "input",
+    attrs: { maxlength: "80" },
+  }) as HTMLInputElement;
   const descInput = el("textarea", {
     className: "input",
     attrs: { maxlength: "500", rows: "3" },
@@ -139,7 +142,9 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
       text: "Eliminar",
       attrs: {
         type: "button",
-        ...(cat.productCount > 0 ? { disabled: "", title: "Mueva u oculte los productos primero" } : {}),
+        ...(cat.productCount > 0
+          ? { disabled: "", title: "Mueva u oculte los productos primero" }
+          : {}),
       },
     });
     del.addEventListener("click", async () => {

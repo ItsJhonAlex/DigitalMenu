@@ -195,4 +195,127 @@ describe("API /api/menu", () => {
     const allIds = body.categories.flatMap((c) => c.products.map((p) => p.id));
     expect(allIds).not.toContain(id);
   });
+
+  test("categoría desactivada oculta la categoría y sus productos activos", async () => {
+    const { app, repos } = setup();
+    const cat = repos.categories.list()[0]!;
+    const pid = repos.products.create({
+      category_id: cat.id,
+      type: "comida",
+      price_minor: 2000,
+      available: true,
+      visible: true,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: pid,
+      lang: "es",
+      name: "Producto activo en cat oculta",
+      description: null,
+    });
+    repos.settings.bumpMenuRevision();
+
+    const before = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    expect(before.status).toBe(200);
+    const bodyBefore = (await before.json()) as MenuResponse;
+    const etagBefore = before.headers.get("ETag");
+    expect(bodyBefore.categories.some((c) => c.id === cat.id)).toBe(true);
+    expect(bodyBefore.categories.flatMap((c) => c.products).some((p) => p.id === pid)).toBe(true);
+
+    const hide = await app.request(`http://localhost:8080/api/admin/categories/${cat.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:8080",
+        Host: "localhost:8080",
+      },
+      body: JSON.stringify({ visible: false }),
+    });
+    expect(hide.status).toBe(200);
+
+    const after = await app.request("http://localhost:8080/api/menu?lang=es", {
+      headers: { ...host, "If-None-Match": etagBefore! },
+    });
+    expect(after.status).toBe(200);
+    const bodyAfter = (await after.json()) as MenuResponse;
+    expect(after.headers.get("ETag")).not.toBe(etagBefore);
+    expect(bodyAfter.categories.some((c) => c.id === cat.id)).toBe(false);
+    expect(bodyAfter.categories.flatMap((c) => c.products).some((p) => p.id === pid)).toBe(false);
+  });
+
+  test("mover producto de categoría se refleja enseguida en la carta", async () => {
+    const { app, repos } = setup();
+    const cats = repos.categories.list();
+    expect(cats.length).toBeGreaterThanOrEqual(2);
+    const catA = cats[0]!;
+    const catB = cats[1]!;
+
+    const pid = repos.products.create({
+      category_id: catA.id,
+      type: "comida",
+      price_minor: 1500,
+      available: true,
+      visible: true,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: pid,
+      lang: "es",
+      name: "Plato móvil",
+      description: null,
+    });
+    // Alinear rev tras escrituras directas al repo (el admin HTTP es quien bumpea)
+    repos.settings.bumpMenuRevision();
+
+    const before = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    expect(before.status).toBe(200);
+    const bodyBefore = (await before.json()) as MenuResponse;
+    const etagBefore = before.headers.get("ETag");
+    expect(etagBefore).toBeTruthy();
+
+    const inA = bodyBefore.categories
+      .find((c) => c.id === catA.id)
+      ?.products.some((p) => p.id === pid);
+    const inB = bodyBefore.categories
+      .find((c) => c.id === catB.id)
+      ?.products.some((p) => p.id === pid);
+    expect(inA).toBe(true);
+    expect(inB).toBeFalsy();
+    const revBefore = bodyBefore.version;
+
+    const move = await app.request(`http://localhost:8080/api/admin/products/${pid}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:8080",
+        Host: "localhost:8080",
+      },
+      body: JSON.stringify({
+        categoryId: catB.id,
+        type: "comida",
+        priceMinor: 1500,
+        available: true,
+        visible: true,
+        i18n: { es: { name: "Plato móvil" } },
+      }),
+    });
+    expect(move.status).toBe(200);
+
+    const after = await app.request("http://localhost:8080/api/menu?lang=es", {
+      headers: { ...host, "If-None-Match": etagBefore! },
+    });
+    expect(after.status).toBe(200);
+    const bodyAfter = (await after.json()) as MenuResponse;
+    expect(bodyAfter.version).toBeGreaterThan(revBefore);
+    expect(after.headers.get("ETag")).not.toBe(etagBefore);
+
+    const stillInA = bodyAfter.categories
+      .find((c) => c.id === catA.id)
+      ?.products.some((p) => p.id === pid);
+    const nowInB = bodyAfter.categories
+      .find((c) => c.id === catB.id)
+      ?.products.some((p) => p.id === pid);
+    expect(stillInA).toBeFalsy();
+    expect(nowInB).toBe(true);
+  });
 });

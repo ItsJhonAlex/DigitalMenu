@@ -1,4 +1,3 @@
-import type { Database } from "bun:sqlite";
 import enUi from "../../carta/i18n/en.json";
 import esUi from "../../carta/i18n/es.json";
 import type {
@@ -19,7 +18,7 @@ const UI_DEFAULTS: Record<string, Record<string, string>> = {
 
 type CacheEntry = { etag: string; body: MenuResponse; builtAt: number };
 
-export function createMenuService(opts: { db: Database; repos: Repos }) {
+export function createMenuService(opts: { repos: Repos }) {
   const cache = new Map<string, CacheEntry>();
 
   const resolveLang = (
@@ -34,38 +33,6 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
       return { lang: defaultLang, requestedLang: requested ?? null };
     }
     return { lang: active[0] ?? "es", requestedLang: requested ?? null };
-  };
-
-  const contentVersion = (): number => {
-    const row = opts.db
-      .prepare(
-        `SELECT
-          (SELECT COUNT(*) FROM products) * 100000 +
-          (SELECT COUNT(*) FROM categories) * 1000 +
-          (SELECT COUNT(*) FROM offers) * 100 +
-          (SELECT COUNT(*) FROM translations) +
-          (SELECT COALESCE(SUM(available), 0) FROM products) +
-          (SELECT COALESCE(SUM(CAST(base_per_unit * 100 AS INTEGER)), 0) FROM currencies)
-         AS v`,
-      )
-      .get() as { v: number };
-    return Math.floor(row.v);
-  };
-
-  /** Incluye valores de carta.* (no solo updated_at: dos writes en el mismo ms no bastan). */
-  const cartaSettingsRev = (): string => {
-    const rows = opts.db
-      .prepare(
-        `SELECT key, value FROM settings WHERE key LIKE 'carta.%' ORDER BY key`,
-      )
-      .all() as Array<{ key: string; value: string }>;
-    if (rows.length === 0) return "0";
-    let h = 0;
-    for (const r of rows) {
-      const s = `${r.key}=${r.value}`;
-      for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-    }
-    return `s${(h >>> 0).toString(36)}`;
   };
 
   const imageOf = (hash: string | null): MenuImage => {
@@ -102,7 +69,7 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
   };
 
   const build = (lang: string, requestedLang: string | null): MenuResponse => {
-    const version = contentVersion();
+    const version = opts.repos.settings.getMenuRevision();
     const currencies = opts.repos.currencies.listActive();
     const base = currencies.find((c) => c.is_base === 1) ?? currencies[0];
     const defaultCurrency = opts.repos.settings.getJson<string>(
@@ -138,12 +105,16 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
       uiBase[row.key] = row.value;
     }
 
-    // Products by category
-    const allProducts = opts.repos.products.list({ visible: true });
+    // Categoría desactivada manda: no sale ella ni sus productos (aunque el producto esté activo)
+    const visibleCats = opts.repos.categories.list().filter((c) => c.visible === 1);
+    const visibleCatIds = new Set(visibleCats.map((c) => c.id));
+    const productsInVisibleCats = opts.repos.products
+      .list({ visible: true })
+      .filter((p) => visibleCatIds.has(p.category_id));
+
     const categoriesOut: MenuCategory[] = [];
-    for (const cat of opts.repos.categories.list()) {
-      if (cat.visible !== 1) continue;
-      const products: MenuProduct[] = allProducts
+    for (const cat of visibleCats) {
+      const products: MenuProduct[] = productsInVisibleCats
         .filter((p) => p.category_id === cat.id)
         .map((p) => {
           const t = pickText("product", p.id, lang);
@@ -220,15 +191,14 @@ export function createMenuService(opts: { db: Database; repos: Repos }) {
     },
     get(requestedLang: string | undefined): { body: MenuResponse; etag: string } {
       const { lang, requestedLang: req } = resolveLang(requestedLang);
-      const version = contentVersion();
-      const settingsRev = cartaSettingsRev();
-      const cacheKey = `${lang}:${version}:${settingsRev}`;
+      // menu.revision sube en cada escritura del admin (y settings.setJson)
+      const rev = opts.repos.settings.getMenuRevision();
+      const cacheKey = `${lang}:${rev}`;
       const hit = cache.get(cacheKey);
       if (hit) return { body: hit.body, etag: hit.etag };
 
       const body = build(lang, req);
-      // settingsRev en ETag: evita 304 del navegador tras cambiar tasa/fotos
-      const etag = `"m-${body.version}-${lang}-${settingsRev}"`;
+      const etag = `"m-${rev}-${lang}"`;
       cache.set(cacheKey, { body, etag, builtAt: Date.now() });
       if (cache.size > 12) {
         const first = cache.keys().next().value;

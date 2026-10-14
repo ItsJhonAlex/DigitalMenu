@@ -1,4 +1,4 @@
-import { api, type Currency } from "../api";
+import { type Currency, api } from "../api";
 import { clear, el, formatRateUpdated } from "../dom";
 import { openModal } from "../modal";
 import { showToast } from "../toast";
@@ -89,15 +89,11 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
             el("td", { text: c.code }),
             el("td", { text: c.name }),
             el("td", {
-              text: c.isBase
-                ? "—"
-                : `${c.basePerUnit} · ${formatRateUpdated(c.rateUpdatedAt)}`,
+              text: c.isBase ? "—" : `${c.basePerUnit} · ${formatRateUpdated(c.rateUpdatedAt)}`,
             }),
             el("td", { text: c.active ? "Sí" : "No" }),
             el("td", {
-              children: [
-                el("div", { className: "row", children: [editRate, makeBase, del] }),
-              ],
+              children: [el("div", { className: "row", children: [editRate, makeBase, del] })],
             }),
           ],
         }),
@@ -149,7 +145,10 @@ function openCurrencyModal(_c: Currency | null, refresh: () => Promise<void>): v
         el("label", { className: "field", children: [el("span", { text: "Código" }), code] }),
         el("label", { className: "field", children: [el("span", { text: "Nombre" }), name] }),
         el("label", { className: "field", children: [el("span", { text: "Símbolo" }), symbol] }),
-        el("label", { className: "field", children: [el("span", { text: "Tasa (base por unidad)" }), rate] }),
+        el("label", {
+          className: "field",
+          children: [el("span", { text: "Tasa (base por unidad)" }), rate],
+        }),
       ],
     }),
     onSave: async () => {

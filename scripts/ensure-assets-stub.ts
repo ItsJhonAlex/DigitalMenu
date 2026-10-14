@@ -17,8 +17,7 @@ export const ASSETS: Record<string, { path: string; type: string }> = {};
 function embeddedPathsExist(source: string): boolean {
   if (!source.includes('with { type: "file" }')) return true;
   const re = /from\s+"([^"]+)"\s+with\s+\{\s*type:\s*"file"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
+  for (const m of source.matchAll(re)) {
     const abs = resolve(SERVER_DIR, m[1]!);
     if (!existsSync(abs)) return false;
   }
@@ -36,7 +35,9 @@ if (!write) {
 
 if (write) {
   writeFileSync(GEN, STUB, "utf8");
-  console.log(force ? "assets.generated.ts: stub (--force)" : "assets.generated.ts: stub (tests/CI)");
+  console.log(
+    force ? "assets.generated.ts: stub (--force)" : "assets.generated.ts: stub (tests/CI)",
+  );
 } else {
   console.log("assets.generated.ts: OK");
 }
