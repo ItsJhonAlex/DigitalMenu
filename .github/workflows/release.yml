@@ -76,8 +76,11 @@ jobs:
         env:
           VERSION: ${{ steps.ver.outputs.version }}
 
+      - name: Stub assets (tests sin dist/)
+        run: bun run assets:stub
+
       - name: Tests
-        run: bun test
+        run: bun run test
 
       - name: Typecheck
         run: bun run typecheck

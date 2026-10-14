@@ -20,6 +20,7 @@ const ICON = join(ROOT, "assets", "icon.ico");
 console.log(`DigitalMenu build v${version}`);
 mkdirSync(DIST, { recursive: true });
 
+await $`bun scripts/ensure-assets-stub.ts`;
 await $`bun run build:web`;
 await $`bun scripts/gen-assets-manifest.ts`;
 await $`bun scripts/check-budget.ts`;
