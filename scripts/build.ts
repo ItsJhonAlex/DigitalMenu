@@ -21,16 +21,19 @@ console.log(`DigitalMenu build v${version}`);
 mkdirSync(DIST, { recursive: true });
 
 await $`bun scripts/ensure-assets-stub.ts`;
+await $`bun scripts/check-brand-assets.ts`;
 await $`bun run build:web`;
 await $`bun scripts/gen-assets-manifest.ts`;
 await $`bun scripts/check-budget.ts`;
 
 const define = `process.env.APP_VERSION="${version}"`;
 
-const iconArgs = existsSync(ICON) ? (["--windows-icon", ICON] as string[]) : [];
 if (!existsSync(ICON)) {
-  console.warn("Aviso: no hay assets/icon.ico — se compila sin icono de Windows.");
+  throw new Error(
+    "Falta assets/icon.ico — ejecute: powershell -NoProfile -File scripts/gen-icon-ico.ps1",
+  );
 }
+const iconArgs = ["--windows-icon", ICON] as string[];
 
 const prodOut = join(DIST, "MenuDigital.exe");
 const debugOut = join(DIST, "MenuDigital-debug.exe");

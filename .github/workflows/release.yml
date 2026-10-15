@@ -79,6 +79,9 @@ jobs:
       - name: Stub assets (tests sin dist/)
         run: bun run assets:stub
 
+      - name: Comprobar marca / favicons / icon.ico
+        run: bun scripts/check-brand-assets.ts
+
       - name: Tests
         run: bun run test
 
@@ -153,6 +156,8 @@ jobs:
             | `MenuDigital-debug-${{ steps.ver.outputs.tag }}.exe` | Debug versionado |
             | `install.ps1` / `uninstall.ps1` | Instalación POS (autoarranque) |
             | `SHA256SUMS.txt` | Checksums |
+
+            **Incluye:** icono de Windows (`icon.ico`), favicons/PWA y wordmark embebidos en `/assets/*` (Carta + Admin).
 
             **Instalación / actualización:** `install.ps1` o copiar el `.exe` a `C:\MenuDigital\` (no tocar `data\`). El debug es opcional.
 
