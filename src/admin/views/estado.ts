@@ -164,8 +164,8 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
     logBody.textContent = d.logTail.slice(-80).join("\n") || "(vacío)";
     updated.textContent = `Actualizado ${new Date(d.checkedAt).toLocaleTimeString()}`;
 
-    const backupFail = d.logAlerts.some((line) =>
-      /backup|copia/i.test(line) && /\[ERROR\]|\[WARN\]/i.test(line),
+    const backupFail = d.logAlerts.some(
+      (line) => /backup|copia/i.test(line) && /\[ERROR\]|\[WARN\]/i.test(line),
     );
     const noBackup = !d.lastBackup && !d.lastAutoAt;
     if (backupFail || noBackup) {

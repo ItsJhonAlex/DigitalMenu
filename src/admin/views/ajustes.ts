@@ -104,7 +104,8 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
     const f = el("input", {
       className: "input",
       attrs: {
-        value: footerMap[lang.code] ?? (lang.code === "es" ? "Precios con impuestos incluidos" : ""),
+        value:
+          footerMap[lang.code] ?? (lang.code === "es" ? "Precios con impuestos incluidos" : ""),
       },
     }) as HTMLInputElement;
     welcomeInputs.set(lang.code, w);
@@ -172,7 +173,13 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
     })();
   }, 400);
 
-  for (const input of [name, defaultLang, defaultCurrency, ...welcomeInputs.values(), ...footerInputs.values()]) {
+  for (const input of [
+    name,
+    defaultLang,
+    defaultCurrency,
+    ...welcomeInputs.values(),
+    ...footerInputs.values(),
+  ]) {
     input.addEventListener("input", persistGeneral);
     input.addEventListener("change", persistGeneral);
   }

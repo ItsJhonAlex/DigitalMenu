@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import { createApp } from "../src/server/app";
 import type { RuntimeOptions } from "../src/server/config";
 import { closeDatabase, openDatabase } from "../src/server/db";
@@ -16,7 +17,6 @@ import {
   parseCatalogFile,
   previewCatalogImport,
 } from "../src/server/services/catalog-io";
-import { strToU8, zipSync } from "fflate";
 import { buildXlsx, excelSafeText, parseXlsx, toCsv } from "../src/server/services/spreadsheet";
 
 const dirs: string[] = [];
@@ -243,7 +243,10 @@ describe("catalog export/import", () => {
       body: fd,
     });
     expect(prev.status).toBe(200);
-    const prevBody = (await prev.json()) as { token: string | null; summary: { updateCount: number } };
+    const prevBody = (await prev.json()) as {
+      token: string | null;
+      summary: { updateCount: number };
+    };
     // Solo updates (mismo contenido) o vacío de creates
     expect(prevBody.token).toBeTruthy();
 

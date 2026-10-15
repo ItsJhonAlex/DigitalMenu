@@ -163,7 +163,10 @@ function renderPhotoCard(
     body.appendChild(el("h3", { text: p.name }));
     if (p.description) body.appendChild(el("p", { text: p.description }));
     body.appendChild(
-      priceBlock(prices, !p.available ? [el("span", { className: "badge badge--sold", text: soldOut })] : []),
+      priceBlock(
+        prices,
+        !p.available ? [el("span", { className: "badge badge--sold", text: soldOut })] : [],
+      ),
     );
     card.appendChild(body);
     bindOpen(card, p, onOpen);
@@ -306,7 +309,9 @@ export function renderProductDetail(
   body.appendChild(el("h2", { text: p.name }));
   if (p.description) body.appendChild(el("p", { text: p.description }));
   if (!p.available) {
-    body.appendChild(el("span", { className: "badge badge--sold", text: menu.ui.soldOut ?? "Agotado" }));
+    body.appendChild(
+      el("span", { className: "badge badge--sold", text: menu.ui.soldOut ?? "Agotado" }),
+    );
   }
   body.appendChild(priceBlock(prices));
   sheet.appendChild(body);

@@ -349,9 +349,7 @@ function paintMain(): void {
       attrs: { id: "sec-offers" },
     });
     const offerAvail = menu.offers.filter((o) => o.available).length;
-    const offerSold = menu.showSoldOut
-      ? menu.offers.filter((o) => !o.available).length
-      : 0;
+    const offerSold = menu.showSoldOut ? menu.offers.filter((o) => !o.available).length : 0;
     const list = el("div", {
       className: menu.showImages ? "section__items" : "section__items section__items--text",
     });
@@ -438,9 +436,14 @@ async function switchLang(code: string): Promise<void> {
 async function load(langHint?: string): Promise<void> {
   const main = document.getElementById("main");
   try {
-    const preferred =
-      langHint ?? localStorage.getItem(LS_LANG) ?? pickLanguage(navigator.language, ["es", "en"]);
-    menu = await fetchMenu(preferred);
+    const hint = langHint ?? localStorage.getItem(LS_LANG) ?? undefined;
+    // Primera carga con hint o navigator; luego alineamos a idiomas activos del menú
+    menu = await fetchMenu(hint ?? navigator.language);
+    const activeCodes = menu.languages.map((l) => l.code);
+    const preferred = pickLanguage(hint ?? navigator.language, activeCodes);
+    if (preferred !== menu.lang) {
+      menu = await fetchMenu(preferred);
+    }
     const savedCur = localStorage.getItem(LS_CUR);
     const codes = menu.currency.list.map((c) => c.code);
     currencyCode =

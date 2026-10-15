@@ -157,7 +157,10 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
   return wrap;
 }
 
-async function openCategoryModal(cat: Category | null, refresh: () => Promise<void>): Promise<void> {
+async function openCategoryModal(
+  cat: Category | null,
+  refresh: () => Promise<void>,
+): Promise<void> {
   const form = await i18nTabs(cat?.i18n);
   const visible = el("input", {
     className: "toggle",

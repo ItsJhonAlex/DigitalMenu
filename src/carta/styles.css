@@ -555,7 +555,6 @@ body {
   left: 0.4rem;
   right: auto;
   bottom: auto;
-  inset: unset;
   display: block;
   background: transparent;
   pointer-events: none;

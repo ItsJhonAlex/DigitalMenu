@@ -92,10 +92,7 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
       "carta.sections_open_default",
       true,
     );
-    const showSectionCounts = repos().settings.getJson<boolean>(
-      "carta.show_section_counts",
-      true,
-    );
+    const showSectionCounts = repos().settings.getJson<boolean>("carta.show_section_counts", true);
 
     const list: CurrencyDto[] = currencies.map((c) => ({
       code: c.code,
@@ -170,13 +167,19 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
     for (const o of repos().offers.list()) {
       if (o.visible !== 1) continue;
       if (o.price_minor <= 0) continue;
+      const rawItems = repos().offers.items(o.id);
+      // Misma regla que categorías: producto en cat. oculta (o invisible) → la oferta no sale
+      if (rawItems.length === 0) continue;
+      const itemsOk = rawItems.every((it) => {
+        const p = repos().products.get(it.product_id);
+        return p != null && p.visible === 1 && visibleCatIds.has(p.category_id);
+      });
+      if (!itemsOk) continue;
       const t = pickText("offer", o.id, lang);
-      const items = repos()
-        .offers.items(o.id)
-        .map((it) => {
-          const pt = pickText("product", it.product_id, lang);
-          return { productId: it.product_id, name: pt.name, quantity: it.quantity };
-        });
+      const items = rawItems.map((it) => {
+        const pt = pickText("product", it.product_id, lang);
+        return { productId: it.product_id, name: pt.name, quantity: it.quantity };
+      });
       offersOut.push({
         id: o.id,
         name: t.name,

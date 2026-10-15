@@ -16,10 +16,7 @@ function mimeFor(name: string): string {
 
 /** Carpeta `assets/` junto al cwd del proceso o relativa al código del server. */
 export function resolveBrandAssetsDir(): string | null {
-  const candidates = [
-    resolve(process.cwd(), "assets"),
-    resolve(import.meta.dir, "../../assets"),
-  ];
+  const candidates = [resolve(process.cwd(), "assets"), resolve(import.meta.dir, "../../assets")];
   for (const dir of candidates) {
     if (existsSync(dir)) return dir;
   }

@@ -436,6 +436,20 @@ describe("API /api/menu", () => {
       name: "Producto activo en cat oculta",
       description: null,
     });
+    const offerId = repos.offers.create({
+      price_minor: 1500,
+      visible: true,
+      available: true,
+      show_savings: false,
+      items: [{ product_id: pid, quantity: 1 }],
+    });
+    repos.translations.upsert({
+      entity: "offer",
+      entity_id: offerId,
+      lang: "es",
+      name: "Oferta con cat oculta",
+      description: null,
+    });
     repos.settings.bumpMenuRevision();
 
     const before = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
@@ -444,6 +458,7 @@ describe("API /api/menu", () => {
     const etagBefore = before.headers.get("ETag");
     expect(bodyBefore.categories.some((c) => c.id === cat.id)).toBe(true);
     expect(bodyBefore.categories.flatMap((c) => c.products).some((p) => p.id === pid)).toBe(true);
+    expect(bodyBefore.offers.some((o) => o.id === offerId)).toBe(true);
 
     const hide = await app.request(`http://localhost:8080/api/admin/categories/${cat.id}`, {
       method: "PATCH",
@@ -464,6 +479,7 @@ describe("API /api/menu", () => {
     expect(after.headers.get("ETag")).not.toBe(etagBefore);
     expect(bodyAfter.categories.some((c) => c.id === cat.id)).toBe(false);
     expect(bodyAfter.categories.flatMap((c) => c.products).some((p) => p.id === pid)).toBe(false);
+    expect(bodyAfter.offers.some((o) => o.id === offerId)).toBe(false);
   });
 
   test("mover producto de categoría se refleja enseguida en la carta", async () => {

@@ -9,10 +9,7 @@ import { closeDatabase, openDatabase } from "../src/server/db";
 import { migrate } from "../src/server/db/migrate";
 import { createRepos } from "../src/server/db/repos";
 import type { Logger } from "../src/server/logger";
-import {
-  MENU_EVENTS_MAX_CLIENTS,
-  createMenuEventsHub,
-} from "../src/server/services/menu-events";
+import { MENU_EVENTS_MAX_CLIENTS, createMenuEventsHub } from "../src/server/services/menu-events";
 
 const dirs: string[] = [];
 const dbs: Database[] = [];

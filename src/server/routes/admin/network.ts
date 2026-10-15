@@ -47,6 +47,12 @@ export function networkAdmin(ctx: AppContext) {
         [{ field: "cartaIp", issue: "format" }],
       );
     }
+    const candidates = listLanCandidates();
+    if (!candidates.some((x) => x.address === cartaIp)) {
+      throw validationError("cartaIp debe ser una IP actual de este equipo", [
+        { field: "cartaIp", issue: "not_local" },
+      ]);
+    }
     repos.settings.setJson("network.carta_ip", cartaIp);
     repos.settings.setJson("network.ip_changed", false);
     return c.json({ ok: true, cartaIp });

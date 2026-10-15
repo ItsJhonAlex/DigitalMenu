@@ -9,6 +9,7 @@ import { closeDatabase, openDatabase } from "../src/server/db";
 import { migrate } from "../src/server/db/migrate";
 import { createRepos } from "../src/server/db/repos";
 import type { Logger } from "../src/server/logger";
+import { isPrivateLanIpv4, listLanCandidates } from "../src/server/services/network";
 
 const dirs: string[] = [];
 const dbs: Database[] = [];
@@ -285,41 +286,35 @@ describe("API admin", () => {
     expect(dl.headers.get("Content-Disposition")).toContain(fullBody.file);
   });
 
-  test("cartaIp debe ser IPv4 de red local", async () => {
+  test("cartaIp debe ser IPv4 privada de este equipo", async () => {
     const { app } = setup();
-    const bad = await app.request("http://localhost:8080/api/admin/network", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "http://localhost:8080",
-        Host: "localhost:8080",
-      },
-      body: JSON.stringify({ cartaIp: "8.8.8.8" }),
-    });
-    expect(bad.status).toBe(400);
+    const headers = {
+      "Content-Type": "application/json",
+      Origin: "http://localhost:8080",
+      Host: "localhost:8080",
+    };
+    const put = (cartaIp: string) =>
+      app.request("http://localhost:8080/api/admin/network", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ cartaIp }),
+      });
 
-    const loop = await app.request("http://localhost:8080/api/admin/network", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "http://localhost:8080",
-        Host: "localhost:8080",
-      },
-      body: JSON.stringify({ cartaIp: "127.0.0.1" }),
-    });
-    expect(loop.status).toBe(400);
+    expect((await put("8.8.8.8")).status).toBe(400);
+    expect((await put("127.0.0.1")).status).toBe(400);
 
-    const ok = await app.request("http://localhost:8080/api/admin/network", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: "http://localhost:8080",
-        Host: "localhost:8080",
-      },
-      body: JSON.stringify({ cartaIp: "192.168.1.50" }),
-    });
-    expect(ok.status).toBe(200);
-    const body = (await ok.json()) as { cartaIp: string };
-    expect(body.cartaIp).toBe("192.168.1.50");
+    const candidates = listLanCandidates().filter((c) => isPrivateLanIpv4(c.address));
+    // IP privada típica pero no presente en este host → rechazo
+    const foreign = "192.168.1.50";
+    if (!candidates.some((c) => c.address === foreign)) {
+      expect((await put(foreign)).status).toBe(400);
+    }
+    if (candidates.length > 0) {
+      const local = candidates[0]!.address;
+      const ok = await put(local);
+      expect(ok.status).toBe(200);
+      const body = (await ok.json()) as { cartaIp: string };
+      expect(body.cartaIp).toBe(local);
+    }
   });
 });

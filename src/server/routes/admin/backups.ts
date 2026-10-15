@@ -97,9 +97,7 @@ export function backupsAdmin(ctx: AppContext) {
         const form = await c.req.parseBody({ all: true });
         const confirmRaw = form.confirm;
         const asFlag = (v: unknown) => v === "true" || v === "1";
-        const confirm = Array.isArray(confirmRaw)
-          ? confirmRaw.some(asFlag)
-          : asFlag(confirmRaw);
+        const confirm = Array.isArray(confirmRaw) ? confirmRaw.some(asFlag) : asFlag(confirmRaw);
         if (!confirm) {
           throw validationError("Se requiere confirm: true");
         }

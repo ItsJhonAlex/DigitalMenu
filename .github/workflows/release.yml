@@ -82,6 +82,9 @@ jobs:
       - name: Comprobar marca / favicons / icon.ico
         run: bun scripts/check-brand-assets.ts
 
+      - name: Lint
+        run: bun run lint
+
       - name: Tests
         run: bun run test
 

@@ -133,10 +133,7 @@ export function createMenuEventsHub(opts?: {
 }
 
 /** Construye la Response SSE (ReadableStream). */
-export function menuEventsResponse(
-  hub: MenuEventsHub,
-  getRevision: () => number,
-): Response {
+export function menuEventsResponse(hub: MenuEventsHub, getRevision: () => number): Response {
   // Sembrar última revisión conocida
   hub.publishRevision(getRevision());
 

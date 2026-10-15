@@ -20,6 +20,11 @@ $AdminLnkName = "Menú Digital — Admin.lnk"
 Write-Host "=== MenuDigital install ===" -ForegroundColor Cyan
 Write-Host "InstallDir=$InstallDir  Port=$Port  PosUser=$PosUser"
 
+# 0. Detener instancia en ejecución antes de copiar (si no, la actualización falla al sobrescribir el .exe)
+Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+Get-Process -Name "MenuDigital", "MenuDigital-debug" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
+
 # 1. Carpetas y ejecutables
 New-Item -ItemType Directory -Force -Path "$InstallDir\data" | Out-Null
 $srcExe = Join-Path $PSScriptRoot "MenuDigital.exe"

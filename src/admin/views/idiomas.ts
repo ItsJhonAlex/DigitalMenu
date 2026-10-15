@@ -120,9 +120,7 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
         text: "Ver faltantes",
         attrs: {
           type: "button",
-          ...(lang.code === "es" || !missing || missing.product === 0
-            ? { disabled: "" }
-            : {}),
+          ...(lang.code === "es" || !missing || missing.product === 0 ? { disabled: "" } : {}),
         },
       });
       viewMissing.addEventListener("click", () => {
