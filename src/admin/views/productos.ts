@@ -1,7 +1,7 @@
 import type { Currency as MoneyCurrency } from "../../shared/money";
 import { formatPrice } from "../../shared/money";
 import { type Category, type Currency, type I18nMap, type Product, api } from "../api";
-import { clearDirty, confirmUnsaved, markDirty } from "../dirty";
+import { clearDirty, confirmUnsaved, isDirty, markDirty } from "../dirty";
 import { clear, el, nameOf } from "../dom";
 import { uploadProductImage } from "../image-compress";
 import { openConfirm, openModal } from "../modal";
@@ -693,19 +693,10 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
     }
   });
 
-  const touchDirty = () => markDirty();
-  for (const node of [nameEs, descEs, nameEn, descEn, price, cat, available, visible]) {
-    node.addEventListener("input", touchDirty);
-    node.addEventListener("change", touchDirty);
-  }
-  for (const btn of typeButtons) {
-    btn.addEventListener("click", touchDirty);
-  }
-
-  const back = el("button", {
+  const back = el("a", {
     className: "btn btn--ghost",
     text: "← Volver a productos",
-    attrs: { type: "button" },
+    attrs: { href: "#/productos" },
   });
 
   const save = el("button", {
@@ -748,12 +739,20 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
     }
   };
 
-  back.addEventListener("click", () => {
-    void (async () => {
-      if (!(await confirmUnsaved())) return;
+  const leaveToList = async (): Promise<void> => {
+    if (!(await confirmUnsaved())) return;
+    clearDirty();
+    goToList();
+  };
+
+  // Sin cambios: deja que el <a href> navegue. Con cambios: confirma y luego navega.
+  back.addEventListener("click", (ev) => {
+    if (!isDirty()) {
       clearDirty();
-      goToList();
-    })();
+      return;
+    }
+    ev.preventDefault();
+    void leaveToList();
   });
   save.addEventListener("click", async () => {
     if (await saveProduct()) goToList();
@@ -764,11 +763,9 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
       if (await saveProduct()) goToList();
     },
     escape: () => {
-      void (async () => {
-        if (!(await confirmUnsaved())) return;
-        clearDirty();
-        goToList();
-      })();
+      const modalRoot = document.getElementById("modal-root");
+      if (modalRoot?.firstChild) return false;
+      void leaveToList();
       return true;
     },
   });
@@ -849,4 +846,19 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
       ],
     }),
   );
+
+  // Tras montar en el DOM: algunos navegadores disparan `change` al conectar
+  // selects/toggles y marcaban dirty en falso → el volver pedía confirm y fallaba.
+  clearDirty();
+  const touchDirty = () => markDirty();
+  queueMicrotask(() => {
+    clearDirty();
+    for (const node of [nameEs, descEs, nameEn, descEn, price, cat, available, visible]) {
+      node.addEventListener("input", touchDirty);
+      node.addEventListener("change", touchDirty);
+    }
+    for (const btn of typeButtons) {
+      btn.addEventListener("click", touchDirty);
+    }
+  });
 }

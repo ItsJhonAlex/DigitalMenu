@@ -3,7 +3,7 @@ import { formatPrice } from "../../shared/money";
 import { type Currency, type I18nMap, type Offer, type Product, api } from "../api";
 import { clear, el, nameOf } from "../dom";
 import { uploadProductImage } from "../image-compress";
-import { openModal } from "../modal";
+import { openConfirm, openModal } from "../modal";
 import { showToast } from "../toast";
 
 type Line = { productId: number; quantity: number };
@@ -285,7 +285,13 @@ function buildOfferCard(
     attrs: { type: "button" },
   });
   del.addEventListener("click", async () => {
-    if (!confirm(`¿Eliminar “${nameOf(o.i18n)}”?`)) return;
+    const ok = await openConfirm({
+      title: "Eliminar oferta",
+      message: `¿Eliminar “${nameOf(o.i18n)}”?`,
+      confirmLabel: "Eliminar",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/api/admin/offers/${o.id}`);
       showToast("Eliminada", "success");
