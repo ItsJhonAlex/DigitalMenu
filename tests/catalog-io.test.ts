@@ -16,6 +16,7 @@ import {
   parseCatalogFile,
   previewCatalogImport,
 } from "../src/server/services/catalog-io";
+import { strToU8, zipSync } from "fflate";
 import { buildXlsx, excelSafeText, parseXlsx, toCsv } from "../src/server/services/spreadsheet";
 
 const dirs: string[] = [];
@@ -104,6 +105,69 @@ describe("spreadsheet xlsx roundtrip", () => {
     const sheets = parseXlsx(bytes);
     expect(sheets[0]?.name).toBe("products");
     expect(sheets[0]?.rows[1]?.[1]).toBe("Mojito");
+  });
+
+  test("parseXlsx lee sharedStrings (t=s) y respeta columnas saltadas", () => {
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>`;
+    const rels = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+    const wbRels = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>`;
+    const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="products" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+    // índice 0 = id header; 1 = name; 2 = rich "Mo"+"jito"; 3 = "1"
+    const shared = `<?xml version="1.0" encoding="UTF-8"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="4" uniqueCount="4">
+  <si><t>id</t></si>
+  <si><t>name_es</t></si>
+  <si><r><t>Mo</t></r><r><t>jito</t></r></si>
+  <si><t>1</t></si>
+</sst>`;
+    // Fila 1: A1=id, B1=name_es; fila 2: A2=1 (shared), C2=Mojito (salta B vacía)
+    const sheet = `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">
+      <c r="A1" t="s"><v>0</v></c>
+      <c r="B1" t="s"><v>1</v></c>
+    </row>
+    <row r="2">
+      <c r="A2" t="s"><v>3</v></c>
+      <c r="C2" t="s"><v>2</v></c>
+    </row>
+  </sheetData>
+</worksheet>`;
+    const bytes = zipSync(
+      {
+        "[Content_Types].xml": strToU8(contentTypes),
+        "_rels/.rels": strToU8(rels),
+        "xl/workbook.xml": strToU8(workbook),
+        "xl/_rels/workbook.xml.rels": strToU8(wbRels),
+        "xl/sharedStrings.xml": strToU8(shared),
+        "xl/worksheets/sheet1.xml": strToU8(sheet),
+      },
+      { level: 6 },
+    );
+    const sheets = parseXlsx(bytes);
+    expect(sheets[0]?.name).toBe("products");
+    expect(sheets[0]?.rows[0]).toEqual(["id", "name_es"]);
+    expect(sheets[0]?.rows[1]?.[0]).toBe("1");
+    expect(sheets[0]?.rows[1]?.[1]).toBe(""); // columna B vacía (saltada)
+    expect(sheets[0]?.rows[1]?.[2]).toBe("Mojito"); // rich text unido
   });
 });
 

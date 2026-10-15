@@ -155,6 +155,15 @@ function renderDatosSection(parent: HTMLElement): void {
       }
       importToken = body.token ?? null;
       const s = body.summary!;
+      if (s.createCount + s.updateCount + s.errorCount === 0) {
+        previewBox.appendChild(
+          el("p", {
+            className: "muted",
+            text: "No se encontraron filas. Revisa que el archivo tenga las hojas categories/products con sus encabezados.",
+          }),
+        );
+        return;
+      }
       previewBox.appendChild(
         el("p", {
           text: `Crear: ${s.createCount} · Actualizar: ${s.updateCount} · Errores: ${s.errorCount}`,

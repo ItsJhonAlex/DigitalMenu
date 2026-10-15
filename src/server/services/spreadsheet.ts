@@ -166,7 +166,14 @@ export function buildXlsx(sheets: Sheet[]): Uint8Array {
   return zipSync(files, { level: 6 });
 }
 
-function extractInlineCells(sheetXmlText: string): string[][] {
+/** Columna 0-based desde referencia Excel (A → 0, B → 1, AA → 26…). */
+function colIndexFromRef(letters: string): number {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+function extractInlineCells(sheetXmlText: string, shared: string[] = []): string[][] {
   const rows: string[][] = [];
   const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/gi;
   let rm = rowRe.exec(sheetXmlText);
@@ -181,14 +188,19 @@ function extractInlineCells(sheetXmlText: string): string[][] {
       const refM = /\br="([A-Z]+)(\d+)"/.exec(attrs);
       let col = cells.length;
       if (refM?.[1]) {
-        let n = 0;
-        for (const ch of refM[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
-        col = n - 1;
+        col = colIndexFromRef(refM[1]);
       }
+      const tAttr = /\bt="([^"]*)"/.exec(attrs)?.[1] ?? "";
       let val = "";
-      const inline = /<t[^>]*>([\s\S]*?)<\/t>/i.exec(body);
-      if (inline) {
-        val = decodeXml(inline[1] ?? "");
+      if (tAttr === "s") {
+        const v = /<v[^>]*>([\s\S]*?)<\/v>/i.exec(body);
+        const idx = Number(v?.[1] ?? "");
+        val = Number.isFinite(idx) ? (shared[idx] ?? "") : "";
+      } else if (tAttr === "inlineStr" || /<is\b/i.test(body)) {
+        const parts = [...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/gi)].map((t) =>
+          decodeXml(t[1] ?? ""),
+        );
+        val = parts.join("");
       } else {
         const v = /<v[^>]*>([\s\S]*?)<\/v>/i.exec(body);
         if (v) val = decodeXml(v[1] ?? "");
@@ -215,9 +227,18 @@ function decodeXml(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** Lee .xlsx generado (o simple con inlineStr / valores). */
+/** Lee .xlsx (inlineStr, sharedStrings o valores numéricos en &lt;v&gt;). */
 export function parseXlsx(buf: Uint8Array): Sheet[] {
   const files = unzipSync(buf);
+  const ssXml = strFromU8(files["xl/sharedStrings.xml"] ?? new Uint8Array());
+  const shared: string[] = [];
+  for (const si of ssXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)) {
+    const parts = [...si[1]!.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((t) =>
+      decodeXml(t[1] ?? ""),
+    );
+    shared.push(parts.join(""));
+  }
+
   const wb = strFromU8(files["xl/workbook.xml"] ?? new Uint8Array());
   const rels = strFromU8(files["xl/_rels/workbook.xml.rels"] ?? new Uint8Array());
   const sheetMeta: Array<{ name: string; target: string }> = [];
@@ -237,7 +258,7 @@ export function parseXlsx(buf: Uint8Array): Sheet[] {
   }
   return sheetMeta.map((sh) => {
     const xml = strFromU8(files[sh.target] ?? new Uint8Array());
-    return { name: sh.name, rows: extractInlineCells(xml) };
+    return { name: sh.name, rows: extractInlineCells(xml, shared) };
   });
 }
 
