@@ -11,7 +11,7 @@ export const securityHeaders = (): MiddlewareHandler => async (c, next) => {
   if (!c.res.headers.has("Content-Security-Policy")) {
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'",
     );
   }
 };
