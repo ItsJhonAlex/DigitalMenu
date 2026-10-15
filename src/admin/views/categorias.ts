@@ -1,79 +1,10 @@
-import { type Category, type I18nMap, api } from "../api";
+import { type Category, api } from "../api";
+import { i18nTabs } from "../components/i18n-tabs";
+import { pageToolbar } from "../components/page-toolbar";
 import { clear, el, nameOf } from "../dom";
-import { openModal } from "../modal";
+import { openConfirm, openModal } from "../modal";
 import { enablePointerSort, nudgeRow, sortableControls } from "../sortable";
 import { showToast } from "../toast";
-
-function i18nForm(initial: I18nMap = { es: { name: "" } }): {
-  root: HTMLElement;
-  getValue: () => I18nMap;
-} {
-  const langs = ["es", "en"];
-  const state: I18nMap = {
-    es: { name: initial.es?.name ?? "", description: initial.es?.description ?? "" },
-    en: { name: initial.en?.name ?? "", description: initial.en?.description ?? "" },
-  };
-  let active = "es";
-  const root = el("div", { className: "stack" });
-  const tabs = el("div", { className: "tabs" });
-  const nameInput = el("input", {
-    className: "input",
-    attrs: { maxlength: "80" },
-  }) as HTMLInputElement;
-  const descInput = el("textarea", {
-    className: "input",
-    attrs: { maxlength: "500", rows: "3" },
-  }) as HTMLTextAreaElement;
-
-  const syncFields = () => {
-    nameInput.value = state[active]?.name ?? "";
-    descInput.value = state[active]?.description ?? "";
-  };
-  const saveFields = () => {
-    state[active] = {
-      name: nameInput.value,
-      description: descInput.value || null,
-    };
-  };
-
-  for (const lang of langs) {
-    const tab = el("button", {
-      className: `tab${lang === active ? " is-active" : ""}`,
-      text: lang.toUpperCase(),
-      attrs: { type: "button" },
-    });
-    tab.addEventListener("click", () => {
-      saveFields();
-      active = lang;
-      for (const t of tabs.querySelectorAll(".tab")) t.classList.remove("is-active");
-      tab.classList.add("is-active");
-      syncFields();
-    });
-    tabs.appendChild(tab);
-  }
-  nameInput.addEventListener("input", saveFields);
-  descInput.addEventListener("input", saveFields);
-  syncFields();
-
-  root.append(
-    tabs,
-    el("label", { className: "field", children: [el("span", { text: "Nombre" }), nameInput] }),
-    el("label", {
-      className: "field",
-      children: [el("span", { text: "Descripción" }), descInput],
-    }),
-  );
-
-  return {
-    root,
-    getValue: () => {
-      saveFields();
-      const out: I18nMap = { es: state.es! };
-      if (state.en?.name?.trim()) out.en = state.en;
-      return out;
-    },
-  };
-}
 
 export async function renderCategorias(root: HTMLElement): Promise<void> {
   const data = await api.get<{ items: Category[] }>("/api/admin/categories");
@@ -90,18 +21,37 @@ export async function renderCategorias(root: HTMLElement): Promise<void> {
 
 async function build(items: Category[], refresh: () => Promise<void>): Promise<HTMLElement> {
   const wrap = el("div", { className: "stack" });
-  const toolbar = el("div", { className: "row row--between" });
-  toolbar.append(
-    el("p", { className: "muted", text: `${items.length} categorías` }),
-    el("button", {
-      className: "btn btn--primary",
-      text: "Nueva categoría",
-      attrs: { type: "button" },
+  const newBtn = el("button", {
+    className: "btn btn--primary",
+    text: "Nueva categoría",
+    attrs: { type: "button" },
+  });
+  newBtn.addEventListener("click", () => void openCategoryModal(null, refresh));
+  wrap.appendChild(
+    pageToolbar({
+      summary: `${items.length} categorías`,
+      actions: [newBtn],
     }),
   );
-  const newBtn = toolbar.querySelector("button")!;
-  newBtn.addEventListener("click", () => openCategoryModal(null, refresh));
-  wrap.appendChild(toolbar);
+
+  if (items.length === 0) {
+    wrap.appendChild(
+      el("div", {
+        className: "card stack empty-state",
+        children: [
+          el("p", { text: "Aún no hay categorías. Cree la primera para organizar la carta." }),
+          el("button", {
+            className: "btn btn--primary",
+            text: "Crear primera categoría",
+            attrs: { type: "button" },
+          }),
+        ],
+      }),
+    );
+    const firstBtn = wrap.querySelector(".empty-state button") as HTMLButtonElement;
+    firstBtn.addEventListener("click", () => void openCategoryModal(null, refresh));
+    return wrap;
+  }
 
   wrap.appendChild(
     el("p", {
@@ -154,7 +104,7 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
       text: "Editar",
       attrs: { type: "button" },
     });
-    edit.addEventListener("click", () => openCategoryModal(cat, refresh));
+    edit.addEventListener("click", () => void openCategoryModal(cat, refresh));
 
     const del = el("button", {
       className: "btn btn--danger btn--sm",
@@ -167,7 +117,13 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
       },
     });
     del.addEventListener("click", async () => {
-      if (!confirm(`¿Eliminar “${nameOf(cat.i18n)}”?`)) return;
+      const ok = await openConfirm({
+        title: "Eliminar categoría",
+        message: `¿Eliminar “${nameOf(cat.i18n)}”?`,
+        confirmLabel: "Eliminar",
+        danger: true,
+      });
+      if (!ok) return;
       try {
         await api.delete(`/api/admin/categories/${cat.id}`);
         showToast("Eliminada", "success");
@@ -201,8 +157,8 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
   return wrap;
 }
 
-function openCategoryModal(cat: Category | null, refresh: () => Promise<void>): void {
-  const form = i18nForm(cat?.i18n);
+async function openCategoryModal(cat: Category | null, refresh: () => Promise<void>): Promise<void> {
+  const form = await i18nTabs(cat?.i18n);
   const visible = el("input", {
     className: "toggle",
     attrs: { type: "checkbox", ...(cat?.visible !== false ? { checked: "" } : {}) },

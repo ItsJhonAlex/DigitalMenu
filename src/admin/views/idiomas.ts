@@ -1,6 +1,6 @@
 import { type Language, api } from "../api";
 import { clear, el } from "../dom";
-import { openModal } from "../modal";
+import { openConfirm, openModal } from "../modal";
 import { showToast } from "../toast";
 
 export async function renderIdiomas(root: HTMLElement): Promise<void> {
@@ -80,8 +80,8 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
       el("thead", {
         children: [
           el("tr", {
-            children: ["Código", "Nombre", "Activo", "Traducido", "Acciones"].map((t) =>
-              el("th", { text: t }),
+            children: ["Código", "Nombre", "Activo", "Traducido", "Faltantes", "Acciones"].map(
+              (t) => el("th", { text: t }),
             ),
           }),
         ],
@@ -104,13 +104,44 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
+
+      const missing = st?.missing;
+      const missingText =
+        lang.code === "es"
+          ? "—"
+          : missing
+            ? `Cat ${missing.category} · Prod ${missing.product} · Ofertas ${missing.offer}`
+            : st
+              ? `${Math.max(0, st.total - st.translated)}`
+              : "—";
+
+      const viewMissing = el("button", {
+        className: "btn btn--ghost btn--sm",
+        text: "Ver faltantes",
+        attrs: {
+          type: "button",
+          ...(lang.code === "es" || !missing || missing.product === 0
+            ? { disabled: "" }
+            : {}),
+        },
+      });
+      viewMissing.addEventListener("click", () => {
+        location.hash = `#/productos?untranslated=${encodeURIComponent(lang.code)}`;
+      });
+
       const del = el("button", {
         className: "btn btn--danger btn--sm",
         text: "Eliminar",
         attrs: { type: "button", ...(lang.code === "es" ? { disabled: "" } : {}) },
       });
       del.addEventListener("click", async () => {
-        if (!confirm(`¿Eliminar idioma ${lang.code}?`)) return;
+        const ok = await openConfirm({
+          title: "Eliminar idioma",
+          message: `¿Eliminar idioma ${lang.code}?`,
+          confirmLabel: "Eliminar",
+          danger: true,
+        });
+        if (!ok) return;
         try {
           await api.delete(`/api/admin/languages/${lang.code}`);
           showToast("Eliminado", "success");
@@ -128,7 +159,10 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
             el("td", {
               text: st ? `${st.translated}/${st.total}` : "—",
             }),
-            el("td", { children: [del] }),
+            el("td", { text: missingText }),
+            el("td", {
+              children: [el("div", { className: "row", children: [viewMissing, del] })],
+            }),
           ],
         }),
       );
@@ -138,7 +172,7 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
     wrap.appendChild(
       el("p", {
         className: "muted tiny",
-        text: "La traducción masiva detalle por detalle se ampliará; use Editar en cada producto/categoría por ahora.",
+        text: "«Ver faltantes» abre Productos filtrados por ese idioma. Complete también categorías y ofertas desde sus fichas.",
       }),
     );
     return wrap;

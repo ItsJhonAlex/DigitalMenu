@@ -1,6 +1,8 @@
 {
   "offers": "Ofertas",
   "soldOut": "Agotado",
+  "soldOutCount": "agotados",
+  "showSoldOut": "Ver agotados",
   "language": "Idioma",
   "currency": "Moneda",
   "rateOfDay": "Tasa del día",

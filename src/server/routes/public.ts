@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { HealthResponse } from "../../shared/api-types";
 import type { AppContext } from "../app";
 import { hasEmbeddedAssets, serveEmbedded } from "../assets";
+import { serveBrandAsset } from "../brand-assets";
 import { createMenuService } from "../services/menu";
 import { MENU_EVENTS_MAX_CLIENTS, menuEventsResponse } from "../services/menu-events";
 
@@ -12,6 +13,12 @@ const IMG_RE = /^[a-f0-9]{16}(_t)?\.webp$/;
 export function publicRoutes(ctx: AppContext) {
   const app = new Hono();
   const menu = createMenuService({ getRepos: () => ctx.repos });
+
+  app.get("/assets/:name", (c) => {
+    const res = serveBrandAsset(`/assets/${c.req.param("name")}`);
+    if (res) return res;
+    return c.notFound();
+  });
 
   app.get("/img/:name", (c) => {
     const name = c.req.param("name");

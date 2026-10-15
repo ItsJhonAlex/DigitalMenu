@@ -1,6 +1,9 @@
 import { type NetworkState, api } from "./api";
 import { BRAND } from "./brand";
+import { clearDirty, confirmLeave, isDirty, setConfirmLeave, setLeaveHandler } from "./dirty";
 import { clear, el } from "./dom";
+import { openConfirm } from "./modal";
+import { clearShortcutHandlers, installShortcuts, setShortcutHandlers } from "./shortcuts";
 import { showToast } from "./toast";
 import { renderAjustes } from "./views/ajustes";
 import { renderCategorias } from "./views/categorias";
@@ -106,9 +109,17 @@ const routes: Route[] = [
   },
 ];
 
-function currentPath(): string {
+/** Path sin query (`/productos` desde `/productos?untranslated=en`). */
+export function currentPath(): string {
   const raw = location.hash.replace(/^#/, "") || "/";
-  return raw.startsWith("/") ? raw : `/${raw}`;
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withSlash.split("?")[0] || "/";
+}
+
+export function currentHashQuery(): URLSearchParams {
+  const raw = location.hash.replace(/^#/, "") || "/";
+  const q = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+  return new URLSearchParams(q);
 }
 
 function findRoute(path: string): Route {
@@ -133,9 +144,11 @@ function buildNav(): void {
         : r.path === "/ofertas"
           ? path === "/ofertas" || path.startsWith("/ofertas/")
           : r.path === path;
+    const attrs: Record<string, string> = { href: `#${r.path}` };
+    if (active) attrs["aria-current"] = "page";
     const a = el("a", {
       className: `nav-link${active ? " is-active" : ""}`,
-      attrs: { href: `#${r.path}` },
+      attrs,
       children: [
         el("span", { className: "nav-link__icon", text: r.icon }),
         el("span", { text: r.label }),
@@ -186,7 +199,15 @@ async function refreshNetworkChrome(): Promise<void> {
   }
 }
 
+let rendering = false;
+let pendingHash: string | null = null;
+
 async function render(): Promise<void> {
+  if (rendering) return;
+  rendering = true;
+  clearShortcutHandlers();
+  setLeaveHandler(null);
+
   const path = currentPath();
   const route = findRoute(path);
   buildNav();
@@ -210,11 +231,15 @@ async function render(): Promise<void> {
   }
 
   const content = document.getElementById("content");
-  if (!content) return;
+  if (!content) {
+    rendering = false;
+    return;
+  }
   clear(content);
   content.appendChild(el("p", { className: "muted tiny", text: "Cargando…" }));
   try {
     clear(content);
+    clearDirty();
     await route.render(content);
   } catch (err) {
     clear(content);
@@ -225,15 +250,61 @@ async function render(): Promise<void> {
       }),
     );
     showToast(err instanceof Error ? err.message : "Error", "error");
+  } finally {
+    rendering = false;
+    if (pendingHash !== null) {
+      pendingHash = null;
+      void render();
+    }
   }
 }
 
+let lastHash = location.hash;
+
 window.addEventListener("hashchange", () => {
-  void render();
+  void (async () => {
+    const next = location.hash;
+    if (isDirty()) {
+      const ok = await confirmLeave();
+      if (!ok) {
+        history.replaceState(null, "", lastHash || "#/");
+        return;
+      }
+      clearDirty();
+    }
+    lastHash = next;
+    if (rendering) {
+      pendingHash = next;
+      return;
+    }
+    await render();
+  })();
+});
+
+setConfirmLeave(async (msg) =>
+  openConfirm({
+    title: "Cambios sin guardar",
+    message: msg ?? "Hay cambios sin guardar. ¿Salir de todas formas?",
+    confirmLabel: "Salir",
+    danger: true,
+  }),
+);
+
+installShortcuts();
+setShortcutHandlers({
+  escape: () => {
+    const modalRoot = document.getElementById("modal-root");
+    if (modalRoot?.firstChild) {
+      // Escape lo maneja el modal
+      return false;
+    }
+    return false;
+  },
 });
 
 void (async () => {
   document.title = `${BRAND} — Menú Digital Admin`;
+  lastHash = location.hash;
   await refreshNetworkChrome();
   await render();
   window.setInterval(() => {

@@ -69,8 +69,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
 
   const wrap = el("div", { className: "stack ofertas" });
 
-  const activeCount = offers.filter((o) => o.visible).length;
-  const pausedCount = offers.filter((o) => !o.visible).length;
+  // Conteos vivos vía `offers` (se actualizan al pausar sin re-fetch)
 
   const newBtn = el("button", {
     className: "btn btn--primary",
@@ -96,7 +95,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
             }),
             el("p", {
               className: "muted tiny",
-              text: `${offers.length} total · ${activeCount} activos · ${pausedCount} pausados`,
+              text: `${offers.length} total · ${offers.filter((o) => o.visible).length} activos · ${offers.filter((o) => !o.visible).length} pausados`,
             }),
           ],
         }),
@@ -132,8 +131,8 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     filterBar.appendChild(btn);
   };
   makeFilter("all", () => `Todos (${offers.length})`);
-  makeFilter("active", () => `Activos en carta (${activeCount})`);
-  makeFilter("paused", () => `Pausados (${pausedCount})`);
+  makeFilter("active", () => `Activos en carta (${offers.filter((o) => o.visible).length})`);
+  makeFilter("paused", () => `Pausados (${offers.filter((o) => !o.visible).length})`);
   makeFilter("soldout", () => `Agotados (${offers.filter((o) => !o.effectiveAvailable).length})`);
 
   wrap.appendChild(el("div", { className: "row ofertas__filters", children: [filterBar, q] }));
@@ -142,6 +141,10 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   wrap.appendChild(list);
 
   const paint = () => {
+    for (const f of filterBtns) {
+      f.btn.textContent = f.label();
+      f.btn.classList.toggle("is-active", f.id === filter);
+    }
     clear(list);
     const query = q.value.trim().toLowerCase();
     let items = offers.slice();
@@ -173,11 +176,12 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     }
 
     for (const o of items) {
-      list.appendChild(buildOfferCard(o, productById, base, root));
+      list.appendChild(buildOfferCard(o, productById, base, root, paint));
     }
   };
 
   q.addEventListener("input", paint);
+  q.setAttribute("data-search", "");
   paint();
   return wrap;
 }
@@ -187,6 +191,7 @@ function buildOfferCard(
   productById: Map<number, Product>,
   base: Currency | undefined,
   root: HTMLElement,
+  onListChange: () => void,
 ): HTMLElement {
   const card = el("article", {
     className: `offer-card${o.visible ? "" : " offer-card--paused"}`,
@@ -260,7 +265,7 @@ function buildOfferCard(
       o.visible = activeToggle.checked;
       card.classList.toggle("offer-card--paused", !o.visible);
       showToast(o.visible ? "Activa en la carta" : "Pausada (oculta en la carta)", "success");
-      await renderOfertas(root);
+      onListChange();
     } catch (err) {
       activeToggle.checked = !activeToggle.checked;
       showToast(err instanceof Error ? err.message : "Error", "error");
@@ -608,15 +613,38 @@ async function renderEditPage(root: HTMLElement, offerId: number): Promise<void>
     clear(linesBox);
     lines.forEach((line, idx) => {
       const p = products.find((x) => x.id === line.productId);
+      const filterInput = el("input", {
+        className: "input",
+        attrs: {
+          type: "search",
+          placeholder: "Buscar producto…",
+          "data-search": "",
+        },
+      }) as HTMLInputElement;
       const sel = el("select", { className: "select grow" }) as HTMLSelectElement;
-      for (const prod of products) {
-        const opt = el("option", {
-          text: `${nameOf(prod.i18n)} · ${fmtMinor(prod.priceMinor, base)}`,
-          attrs: { value: String(prod.id) },
-        });
-        if (prod.id === line.productId) opt.selected = true;
-        sel.appendChild(opt);
-      }
+
+      const fillSelect = () => {
+        const query = filterInput.value.trim().toLowerCase();
+        clear(sel);
+        for (const prod of products) {
+          const label = nameOf(prod.i18n);
+          if (query && !label.toLowerCase().includes(query) && prod.id !== line.productId) {
+            continue;
+          }
+          const opt = el("option", {
+            text: `${label} · ${fmtMinor(prod.priceMinor, base)}`,
+            attrs: { value: String(prod.id) },
+          });
+          if (prod.id === line.productId) opt.selected = true;
+          sel.appendChild(opt);
+        }
+        if (!sel.value && products[0]) {
+          line.productId = products[0].id;
+          sel.value = String(products[0].id);
+        }
+      };
+      fillSelect();
+      filterInput.addEventListener("input", fillSelect);
       sel.addEventListener("change", () => {
         line.productId = Number(sel.value);
         paintSummary();
@@ -671,15 +699,21 @@ async function renderEditPage(root: HTMLElement, offerId: number): Promise<void>
 
       linesBox.appendChild(
         el("div", {
-          className: "offer-line",
+          className: "offer-line stack",
           children: [
-            sel,
+            filterInput,
             el("div", {
-              className: "qty-stepper",
-              children: [minus, qtyLabel, plus],
+              className: "row",
+              children: [
+                sel,
+                el("div", {
+                  className: "qty-stepper",
+                  children: [minus, qtyLabel, plus],
+                }),
+                subEl,
+                rm,
+              ],
             }),
-            subEl,
-            rm,
           ],
         }),
       );

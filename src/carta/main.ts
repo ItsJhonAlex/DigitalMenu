@@ -1,6 +1,14 @@
 import type { MenuProduct, MenuResponse } from "../shared/api-types";
 import { pickLanguage } from "../shared/i18n";
-import { clear, el, renderCategorySection, renderOfferCard, renderProductDetail } from "./render";
+import {
+  attachSectionBody,
+  clear,
+  el,
+  formatSectionCount,
+  renderCategorySection,
+  renderOfferCard,
+  renderProductDetail,
+} from "./render";
 
 const LS_LANG = "dm.lang";
 const LS_CUR = "dm.currency";
@@ -9,6 +17,9 @@ let menu: MenuResponse | null = null;
 let currencyCode = "CUP";
 let activeCat = "offers";
 let detailRoot: HTMLElement | null = null;
+let sectionSpy: IntersectionObserver | null = null;
+const spyRatios = new Map<Element, number>();
+let spyIgnoreUntil = 0;
 
 function findProduct(id: number): MenuProduct | null {
   if (!menu) return null;
@@ -91,12 +102,10 @@ async function softReload(): Promise<void> {
     requestAnimationFrame(() => {
       activeCat = keepCat;
       paintNav();
+      syncStickyOffset();
       const target = document.getElementById(keepCat === "offers" ? "sec-offers" : keepCat);
       if (target) {
-        const top = target.getBoundingClientRect().top + window.scrollY;
-        const header = document.getElementById("top");
-        const offset = header ? header.getBoundingClientRect().height + 8 : 0;
-        window.scrollTo(0, Math.max(0, top - offset));
+        scrollToSectionEl(target, false);
       } else {
         window.scrollTo(0, scrollY);
       }
@@ -205,6 +214,95 @@ function paintRate(): void {
   bar.textContent = `${label}: ${parts.join(" · ")}`;
 }
 
+function catIdFromSection(section: Element): string {
+  return section.id === "sec-offers" ? "offers" : section.id;
+}
+
+function setActiveCat(id: string, opts?: { scrollNav?: boolean }): void {
+  if (activeCat === id) return;
+  activeCat = id;
+  const nav = document.getElementById("cat-nav");
+  if (!nav) return;
+  for (const btn of nav.querySelectorAll<HTMLButtonElement>("button[data-cat-id]")) {
+    const on = btn.dataset.catId === id;
+    btn.classList.toggle("is-active", on);
+    if (on && opts?.scrollNav !== false) {
+      btn.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+    }
+  }
+}
+
+function teardownSectionSpy(): void {
+  sectionSpy?.disconnect();
+  sectionSpy = null;
+  spyRatios.clear();
+}
+
+function setupSectionSpy(): void {
+  teardownSectionSpy();
+  const main = document.getElementById("main");
+  if (!main) return;
+  const sections = [...main.querySelectorAll(":scope > section[id]")];
+  if (sections.length === 0) return;
+
+  sectionSpy = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        spyRatios.set(e.target, e.isIntersecting ? e.intersectionRatio : 0);
+      }
+      if (Date.now() < spyIgnoreUntil) return;
+
+      let best: Element | null = null;
+      let bestRatio = 0;
+      for (const [el, ratio] of spyRatios) {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = el;
+        }
+      }
+      if (!best || bestRatio <= 0) return;
+      setActiveCat(catIdFromSection(best));
+    },
+    {
+      rootMargin: "-20% 0px -60% 0px",
+      threshold: [0, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1],
+    },
+  );
+
+  for (const sec of sections) {
+    spyRatios.set(sec, 0);
+    sectionSpy.observe(sec);
+  }
+}
+
+function cssLengthToPx(value: string): number {
+  const v = value.trim();
+  if (!v) return 0;
+  const n = Number.parseFloat(v);
+  if (!Number.isFinite(n)) return 0;
+  if (v.endsWith("rem")) {
+    const rootFs = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return n * rootFs;
+  }
+  return n;
+}
+
+function stickyChromeHeight(): number {
+  const headerH = document.getElementById("top")?.getBoundingClientRect().height ?? 0;
+  const catsH = document.getElementById("cat-nav")?.getBoundingClientRect().height ?? 0;
+  const catsGap = cssLengthToPx(
+    getComputedStyle(document.documentElement).getPropertyValue("--cats-gap"),
+  );
+  return Math.ceil(headerH + catsGap + catsH + 4);
+}
+
+function scrollToSectionEl(target: HTMLElement, smooth = true): void {
+  const fold = target.querySelector(":scope > details.section-fold") as HTMLDetailsElement | null;
+  if (fold && !fold.open) fold.open = true;
+  const y = target.getBoundingClientRect().top + window.scrollY - stickyChromeHeight();
+  window.scrollTo({ top: Math.max(0, y), behavior: smooth ? "smooth" : "auto" });
+}
+
 function paintNav(): void {
   const nav = document.getElementById("cat-nav");
   if (!nav || !menu) return;
@@ -222,14 +320,14 @@ function paintNav(): void {
   for (const item of items) {
     const btn = el("button", {
       text: item.label,
-      attrs: { type: "button" },
+      attrs: { type: "button", "data-cat-id": item.id },
       className: item.id === activeCat ? "is-active" : undefined,
     });
     btn.addEventListener("click", () => {
-      activeCat = item.id;
-      paintNav();
+      spyIgnoreUntil = Date.now() + 900;
+      setActiveCat(item.id, { scrollNav: false });
       const target = document.getElementById(item.id === "offers" ? "sec-offers" : item.id);
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (target) scrollToSectionEl(target);
     });
     nav.appendChild(btn);
   }
@@ -250,22 +348,28 @@ function paintMain(): void {
       className: menu.showImages ? undefined : "section--text",
       attrs: { id: "sec-offers" },
     });
-    sec.appendChild(
-      el("div", {
-        className: "section__head",
-        children: [
-          el("h2", { text: menu.ui.offers ?? "Ofertas" }),
-          el("span", { className: "badge", text: "Hoy" }),
-        ],
-      }),
-    );
+    const offerAvail = menu.offers.filter((o) => o.available).length;
+    const offerSold = menu.showSoldOut
+      ? menu.offers.filter((o) => !o.available).length
+      : 0;
     const list = el("div", {
       className: menu.showImages ? "section__items" : "section__items section__items--text",
     });
     for (const o of menu.offers) {
       list.appendChild(renderOfferCard(o, menu, currencyCode));
     }
-    sec.appendChild(list);
+    attachSectionBody(sec, {
+      title: menu.ui.offers ?? "Ofertas",
+      countLabel: menu.showSectionCounts
+        ? formatSectionCount(offerAvail, offerSold, menu.ui)
+        : null,
+      collapsible: menu.sectionsCollapsible,
+      openDefault: menu.sectionsOpenDefault,
+      body: list,
+    });
+    // Badge «Hoy» junto al conteo cuando hay ofertas
+    const head = sec.querySelector(".section__head");
+    head?.appendChild(el("span", { className: "badge", text: "Hoy" }));
     main.appendChild(sec);
   }
 
@@ -276,9 +380,15 @@ function paintMain(): void {
 
 function syncStickyOffset(): void {
   const top = document.getElementById("top");
-  if (!top) return;
-  const h = Math.ceil(top.getBoundingClientRect().height);
-  document.documentElement.style.setProperty("--header-h", `${h}px`);
+  const cats = document.getElementById("cat-nav");
+  if (top) {
+    const h = Math.ceil(top.getBoundingClientRect().height);
+    document.documentElement.style.setProperty("--header-h", `${h}px`);
+  }
+  if (cats) {
+    const ch = Math.ceil(cats.getBoundingClientRect().height);
+    document.documentElement.style.setProperty("--cats-h", `${ch}px`);
+  }
 }
 
 function paintChrome(): void {
@@ -292,6 +402,8 @@ function paintChrome(): void {
     app.classList.toggle("app--photos", menu.showImages);
   }
   if (name) name.textContent = menu.restaurant.name;
+  const logo = document.getElementById("brand-logo") as HTMLImageElement | null;
+  if (logo) logo.alt = menu.restaurant.name || "Avanzar In Time";
   if (welcome) {
     const text = menu.restaurant.welcome?.trim() ?? "";
     welcome.textContent = text;
@@ -313,6 +425,7 @@ function paint(): void {
   paintRate();
   paintNav();
   paintMain();
+  setupSectionSpy();
   syncStickyOffset();
   requestAnimationFrame(syncStickyOffset);
 }

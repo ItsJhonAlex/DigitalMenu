@@ -19,6 +19,10 @@ function mime(path: string): string {
   if (path.endsWith(".css")) return "text/css; charset=utf-8";
   if (path.endsWith(".svg")) return "image/svg+xml";
   if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webmanifest") || path.endsWith(".json")) {
+    return "application/manifest+json; charset=utf-8";
+  }
   if (path.endsWith(".woff2")) return "font/woff2";
   return "application/octet-stream";
 }
@@ -125,6 +129,16 @@ function main(): void {
     { url: adminJsUrl, absPath: adminJs, type: mime(adminJs) },
     { url: adminCss.url, absPath: adminCss.absPath, type: mime(adminCss.absPath) },
   ];
+
+  // Marca / favicons / PWA (carpeta assets/ del repo)
+  const brandDir = join(ROOT, "assets");
+  if (existsSync(brandDir)) {
+    for (const f of readdirSync(brandDir)) {
+      if (!/\.(png|webp|svg|webmanifest|json)$/i.test(f)) continue;
+      const absPath = join(brandDir, f);
+      entries.push({ url: `/assets/${f}`, absPath, type: mime(absPath) });
+    }
+  }
 
   // Limpiar CSS antiguos sin hash si quedaran
   for (const app of ["carta", "admin"] as const) {

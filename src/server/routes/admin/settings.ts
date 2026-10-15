@@ -11,6 +11,11 @@ const ALLOWED = new Set([
   "carta.default_currency",
   "carta.show_rate",
   "carta.show_images",
+  "carta.show_soldout",
+  "carta.soldout_collapsed",
+  "carta.sections_collapsible",
+  "carta.sections_open_default",
+  "carta.show_section_counts",
   "carta.second_currency",
   "carta.soldout_position",
   "wifi.ssid",
@@ -67,7 +72,15 @@ export function settingsAdmin(ctx: AppContext) {
 
     for (const [key, value] of Object.entries(body)) {
       if (key === "admin.pin") continue;
-      if (key === "carta.show_images" || key === "carta.show_rate") {
+      if (
+        key === "carta.show_images" ||
+        key === "carta.show_rate" ||
+        key === "carta.show_soldout" ||
+        key === "carta.soldout_collapsed" ||
+        key === "carta.sections_collapsible" ||
+        key === "carta.sections_open_default" ||
+        key === "carta.show_section_counts"
+      ) {
         repos.settings.setJson(key, value === true || value === "true");
         continue;
       }

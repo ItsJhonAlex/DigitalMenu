@@ -4,6 +4,7 @@
 import { api } from "../api";
 import { clear, el } from "../dom";
 import { showToast } from "../toast";
+import { renderCopias } from "./copias";
 
 export type DiagnosticsDto = {
   version: string;
@@ -61,6 +62,12 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
   clear(root);
   const wrap = el("div", { className: "stack" });
   root.appendChild(wrap);
+
+  const backupWarn = el("div", {
+    className: "banner",
+    attrs: { hidden: "true" },
+  });
+  wrap.appendChild(backupWarn);
 
   const head = el("div", { className: "row row--between" });
   head.append(
@@ -156,6 +163,24 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
 
     logBody.textContent = d.logTail.slice(-80).join("\n") || "(vacío)";
     updated.textContent = `Actualizado ${new Date(d.checkedAt).toLocaleTimeString()}`;
+
+    const backupFail = d.logAlerts.some((line) =>
+      /backup|copia/i.test(line) && /\[ERROR\]|\[WARN\]/i.test(line),
+    );
+    const noBackup = !d.lastBackup && !d.lastAutoAt;
+    if (backupFail || noBackup) {
+      backupWarn.hidden = false;
+      clear(backupWarn);
+      backupWarn.appendChild(
+        el("strong", {
+          text: backupFail
+            ? "Fallo en una copia de seguridad reciente. Revise el log y la sección Copias."
+            : "Aún no hay copias de seguridad. Cree una en la sección Copias abajo.",
+        }),
+      );
+    } else {
+      backupWarn.hidden = true;
+    }
   };
 
   const tick = async () => {
@@ -182,6 +207,10 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
 
   await tick();
   timer = setInterval(() => void tick(), REFRESH_MS);
+
+  const copiasMount = el("div", { className: "stack" });
+  wrap.appendChild(copiasMount);
+  void renderCopias(copiasMount);
 
   // Detener al salir de la vista (si el root se vacía / navega)
   const obs = new MutationObserver(() => {

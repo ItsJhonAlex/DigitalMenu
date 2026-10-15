@@ -1,9 +1,11 @@
 import type { Currency as MoneyCurrency } from "../../shared/money";
 import { formatPrice } from "../../shared/money";
 import { type Category, type Currency, type I18nMap, type Product, api } from "../api";
+import { clearDirty, confirmUnsaved, markDirty } from "../dirty";
 import { clear, el, nameOf } from "../dom";
 import { uploadProductImage } from "../image-compress";
-import { openModal } from "../modal";
+import { openConfirm, openModal } from "../modal";
+import { setShortcutHandlers } from "../shortcuts";
 import { enablePointerSort, nudgeRow, sortableControls } from "../sortable";
 import { showToast } from "../toast";
 
@@ -26,8 +28,18 @@ function typeLabel(t: string): string {
   return "Comida";
 }
 
+function hashPath(): string {
+  return (location.hash.replace(/^#/, "") || "/").split("?")[0] || "/";
+}
+
+function hashQuery(): URLSearchParams {
+  const raw = location.hash.replace(/^#/, "") || "";
+  const q = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+  return new URLSearchParams(q);
+}
+
 function editIdFromHash(): number | null {
-  const m = location.hash.match(/^#\/productos\/editar\/(\d+)\/?$/);
+  const m = hashPath().match(/^\/productos\/editar\/(\d+)\/?$/);
   if (!m) return null;
   const id = Number(m[1]);
   return Number.isFinite(id) ? id : null;
@@ -48,7 +60,14 @@ export async function renderProductos(root: HTMLElement): Promise<void> {
     await renderEditPage(root, editId);
     return;
   }
-  root.appendChild(await buildList(root));
+  const list = await buildList(root);
+  root.appendChild(list);
+  const q = hashQuery();
+  if (q.get("nuevo") === "1") {
+    const btn = list.querySelector<HTMLButtonElement>("[data-nuevo-producto]");
+    btn?.click();
+    history.replaceState(null, "", "#/productos");
+  }
 }
 
 async function buildList(root: HTMLElement): Promise<HTMLElement> {
@@ -64,7 +83,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   const wrap = el("div", { className: "stack" });
   const q = el("input", {
     className: "input grow",
-    attrs: { type: "search", placeholder: "Buscar por nombre…" },
+    attrs: { type: "search", placeholder: "Buscar por nombre…", "data-search": "" },
   }) as HTMLInputElement;
   const catFilter = el("select", { className: "select" }) as HTMLSelectElement;
   catFilter.appendChild(el("option", { text: "Todas las categorías", attrs: { value: "" } }));
@@ -88,11 +107,28 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   ] as const) {
     statusFilter.appendChild(el("option", { text: t, attrs: { value: v } }));
   }
+  const untranslatedFilter = el("select", { className: "select" }) as HTMLSelectElement;
+  untranslatedFilter.appendChild(el("option", { text: "Traducción: todas", attrs: { value: "" } }));
+  untranslatedFilter.appendChild(
+    el("option", { text: "Sin traducir (falta algún idioma)", attrs: { value: "any" } }),
+  );
+  const initialUntranslated = hashQuery().get("untranslated");
+  if (initialUntranslated === "any" || initialUntranslated === "1") {
+    untranslatedFilter.value = "any";
+  } else if (initialUntranslated) {
+    untranslatedFilter.appendChild(
+      el("option", {
+        text: `Sin traducir (${initialUntranslated})`,
+        attrs: { value: initialUntranslated },
+      }),
+    );
+    untranslatedFilter.value = initialUntranslated;
+  }
 
   const newBtn = el("button", {
     className: "btn btn--primary",
     text: "+ Nuevo producto",
-    attrs: { type: "button" },
+    attrs: { type: "button", "data-nuevo-producto": "" },
   });
   newBtn.addEventListener("click", () =>
     openCreateModal(categories.items, baseCode, (created) => {
@@ -102,8 +138,8 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
 
   wrap.appendChild(
     el("div", {
-      className: "row",
-      children: [q, catFilter, typeFilter, statusFilter, newBtn],
+      className: "row productos-filters",
+      children: [q, catFilter, typeFilter, statusFilter, untranslatedFilter, newBtn],
     }),
   );
 
@@ -124,10 +160,20 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     if (typeFilter.value) items = items.filter((p) => p.type === typeFilter.value);
     if (statusFilter.value === "available") items = items.filter((p) => p.available);
     if (statusFilter.value === "soldout") items = items.filter((p) => !p.available);
+    if (untranslatedFilter.value === "any") {
+      items = items.filter((p) => (p.missingLangs?.length ?? 0) > 0);
+    } else if (untranslatedFilter.value) {
+      const lang = untranslatedFilter.value;
+      items = items.filter((p) => p.missingLangs?.includes(lang));
+    }
 
     // RF-17: reordenar solo con una categoría y sin otros filtros (lista completa)
     const canReorder =
-      Boolean(catFilter.value) && !query && !typeFilter.value && !statusFilter.value;
+      Boolean(catFilter.value) &&
+      !query &&
+      !typeFilter.value &&
+      !statusFilter.value &&
+      !untranslatedFilter.value;
     hint.textContent = canReorder
       ? "Arrastre ⠿ con el dedo o use ↑/↓. El orden se guarda al soltar (actualiza la carta)."
       : "Para reordenar, elija una sola categoría y quite búsqueda/tipo/estado.";
@@ -145,6 +191,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
               "Tipo",
               "Precio",
               "Disp.",
+              "Visible",
               "Acciones",
             ].map((t) => el("th", { text: t })),
           }),
@@ -204,6 +251,21 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
+      const visibleToggle = el("input", {
+        className: "toggle",
+        attrs: { type: "checkbox" },
+      }) as HTMLInputElement;
+      visibleToggle.checked = p.visible !== false;
+      visibleToggle.addEventListener("change", async () => {
+        try {
+          await api.patch(`/api/admin/products/${p.id}`, { visible: visibleToggle.checked });
+          p.visible = visibleToggle.checked;
+          showToast(visibleToggle.checked ? "Visible" : "Oculto", "success");
+        } catch (err) {
+          visibleToggle.checked = !visibleToggle.checked;
+          showToast(err instanceof Error ? err.message : "Error", "error");
+        }
+      });
       const edit = el("button", {
         className: "btn btn--ghost btn--sm",
         text: "Editar",
@@ -216,7 +278,13 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
         attrs: { type: "button" },
       });
       del.addEventListener("click", async () => {
-        if (!confirm(`¿Eliminar “${nameOf(p.i18n)}”?`)) return;
+        const ok = await openConfirm({
+          title: "Eliminar producto",
+          message: `¿Eliminar “${nameOf(p.i18n)}”?`,
+          confirmLabel: "Eliminar",
+          danger: true,
+        });
+        if (!ok) return;
         try {
           await api.delete(`/api/admin/products/${p.id}`);
           showToast("Eliminado", "success");
@@ -225,6 +293,10 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
+
+      const priceLabel = base
+        ? formatPrice(p.priceMinor, toMoney(base), toMoney(base))
+        : `${p.priceMinor} ${baseCode}`;
 
       const cells: HTMLElement[] = [];
       if (canReorder) {
@@ -235,8 +307,9 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
         el("td", { text: nameOf(p.i18n) }),
         el("td", { text: catName.get(p.categoryId) ?? "—" }),
         el("td", { text: typeLabel(p.type) }),
-        el("td", { text: `${p.priceMinor} ${baseCode}` }),
+        el("td", { text: priceLabel }),
         el("td", { children: [toggle] }),
+        el("td", { children: [visibleToggle] }),
         el("td", { children: [el("div", { className: "row", children: [edit, del] })] }),
       );
 
@@ -263,6 +336,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   catFilter.addEventListener("change", paintTable);
   typeFilter.addEventListener("change", paintTable);
   statusFilter.addEventListener("change", paintTable);
+  untranslatedFilter.addEventListener("change", paintTable);
   paintTable();
   wrap.appendChild(tableWrap);
   return wrap;
@@ -596,6 +670,7 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
     imageHash = null;
     photoNote.textContent = "Foto quitada (guarde para aplicar)";
     paintPreview();
+    markDirty();
   });
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files?.[0];
@@ -608,6 +683,7 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
       imageHash = up.image;
       photoNote.textContent = up.note;
       paintPreview();
+      markDirty();
       showToast("Foto lista", "success");
     } catch (err) {
       photoNote.textContent = "";
@@ -617,23 +693,32 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
     }
   });
 
+  const touchDirty = () => markDirty();
+  for (const node of [nameEs, descEs, nameEn, descEn, price, cat, available, visible]) {
+    node.addEventListener("input", touchDirty);
+    node.addEventListener("change", touchDirty);
+  }
+  for (const btn of typeButtons) {
+    btn.addEventListener("click", touchDirty);
+  }
+
   const back = el("button", {
     className: "btn btn--ghost",
     text: "← Volver a productos",
     attrs: { type: "button" },
   });
-  back.addEventListener("click", goToList);
 
   const save = el("button", {
     className: "btn btn--primary",
     text: "Guardar cambios",
     attrs: { type: "button" },
   });
-  save.addEventListener("click", async () => {
+
+  const saveProduct = async (): Promise<boolean> => {
     const esName = nameEs.value.trim();
     if (!esName) {
       showToast("El nombre en español es obligatorio", "error");
-      return;
+      return false;
     }
     save.setAttribute("disabled", "true");
     try {
@@ -652,13 +737,40 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
         image: imageHash,
         i18n,
       });
+      clearDirty();
       showToast("Producto actualizado", "success");
-      goToList();
+      return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error", "error");
+      return false;
     } finally {
       save.removeAttribute("disabled");
     }
+  };
+
+  back.addEventListener("click", () => {
+    void (async () => {
+      if (!(await confirmUnsaved())) return;
+      clearDirty();
+      goToList();
+    })();
+  });
+  save.addEventListener("click", async () => {
+    if (await saveProduct()) goToList();
+  });
+
+  setShortcutHandlers({
+    save: async () => {
+      if (await saveProduct()) goToList();
+    },
+    escape: () => {
+      void (async () => {
+        if (!(await confirmUnsaved())) return;
+        clearDirty();
+        goToList();
+      })();
+      return true;
+    },
   });
 
   const left = el("div", {

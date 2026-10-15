@@ -142,6 +142,21 @@ describe("API /api/menu", () => {
     const money = await app.request("http://localhost:8080/shared/money.ts", { headers: host });
     expect(money.status).toBe(200);
     expect(money.headers.get("Content-Type")).toContain("javascript");
+
+    const fav = await app.request("http://localhost:8080/assets/favicon-32.png", { headers: host });
+    expect(fav.status).toBe(200);
+    expect(fav.headers.get("Content-Type")).toContain("image/png");
+
+    const wordmark = await app.request("http://localhost:8080/assets/wordmark-transparent.png", {
+      headers: host,
+    });
+    expect(wordmark.status).toBe(200);
+
+    const manifest = await app.request("http://localhost:8080/assets/site.webmanifest", {
+      headers: host,
+    });
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("Content-Type")).toContain("manifest");
   });
 
   test("respeta carta.show_images y show_rate (sin 304 obsoleto)", async () => {
@@ -149,6 +164,11 @@ describe("API /api/menu", () => {
     const withDefault = await app.request("http://localhost:8080/api/menu", { headers: host });
     const first = (await withDefault.json()) as MenuResponse;
     expect(first.showImages).toBe(true);
+    expect(first.showSoldOut).toBe(true);
+    expect(first.soldOutCollapsed).toBe(true);
+    expect(first.sectionsCollapsible).toBe(false);
+    expect(first.sectionsOpenDefault).toBe(true);
+    expect(first.showSectionCounts).toBe(true);
     expect(first.currency.showRate).toBe(true);
     const etag1 = withDefault.headers.get("ETag");
 
@@ -169,6 +189,209 @@ describe("API /api/menu", () => {
     const body = (await offRate.json()) as MenuResponse;
     expect(body.currency.showRate).toBe(false);
     expect(body.showImages).toBe(false);
+  });
+
+  test("carta.show_soldout=false excluye agotados del payload", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.create({ visible: true, sort_order: 55 });
+    repos.translations.upsert({
+      entity: "category",
+      entity_id: catId,
+      lang: "es",
+      name: "Con agotado",
+      description: null,
+    });
+    const ok = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 800,
+      visible: true,
+      available: true,
+    });
+    const sold = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 800,
+      visible: true,
+      available: false,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: ok,
+      lang: "es",
+      name: "OK",
+      description: null,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: sold,
+      lang: "es",
+      name: "Agotado",
+      description: null,
+    });
+    repos.settings.setJson("carta.show_soldout", false);
+    repos.settings.setJson("carta.soldout_collapsed", false);
+    repos.settings.bumpMenuRevision();
+
+    const res = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    const body = (await res.json()) as MenuResponse;
+    expect(body.showSoldOut).toBe(false);
+    expect(body.soldOutCollapsed).toBe(false);
+    const ids = body.categories.find((c) => c.id === catId)?.products.map((p) => p.id) ?? [];
+    expect(ids).toEqual([ok]);
+  });
+
+  test("carta.sections_collapsible, open_default y show_section_counts en el payload", async () => {
+    const { app, repos } = setup();
+    repos.settings.setJson("carta.sections_collapsible", true);
+    repos.settings.setJson("carta.sections_open_default", false);
+    repos.settings.setJson("carta.show_section_counts", false);
+    repos.settings.bumpMenuRevision();
+
+    const res = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    const body = (await res.json()) as MenuResponse;
+    expect(body.sectionsCollapsible).toBe(true);
+    expect(body.sectionsOpenDefault).toBe(false);
+    expect(body.showSectionCounts).toBe(false);
+  });
+
+  test("agotados al final de cada categoría (orden relativo estable)", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.create({ visible: true, sort_order: 50 });
+    repos.translations.upsert({
+      entity: "category",
+      entity_id: catId,
+      lang: "es",
+      name: "Orden agotados",
+      description: null,
+    });
+    const mk = (name: string, sort: number, available: boolean) => {
+      const id = repos.products.create({
+        category_id: catId,
+        type: "comida",
+        price_minor: 1000,
+        visible: true,
+        available,
+        sort_order: sort,
+      });
+      repos.translations.upsert({
+        entity: "product",
+        entity_id: id,
+        lang: "es",
+        name,
+        description: null,
+      });
+      return id;
+    };
+    const a = mk("A-disponible", 10, true);
+    const b = mk("B-agotado", 20, false);
+    const c = mk("C-disponible", 30, true);
+    const d = mk("D-agotado", 40, false);
+    repos.settings.bumpMenuRevision();
+
+    const res = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    const body = (await res.json()) as MenuResponse;
+    const ids = body.categories.find((c) => c.id === catId)?.products.map((p) => p.id) ?? [];
+    expect(ids).toEqual([a, c, b, d]);
+  });
+
+  test("oculta productos y ofertas con precio 0 (y categorías que queden vacías)", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.create({ visible: true, sort_order: 99 });
+    repos.translations.upsert({
+      entity: "category",
+      entity_id: catId,
+      lang: "es",
+      name: "Solo cero",
+      description: null,
+    });
+    const zeroPid = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 0,
+      visible: true,
+      available: true,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: zeroPid,
+      lang: "es",
+      name: "Gratis",
+      description: null,
+    });
+    const paidInSame = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 500,
+      visible: true,
+      available: true,
+    });
+    // categoría solo con precio 0 → no debe aparecer
+    const emptyishCat = repos.categories.create({ visible: true, sort_order: 100 });
+    repos.translations.upsert({
+      entity: "category",
+      entity_id: emptyishCat,
+      lang: "es",
+      name: "Vacía por precio",
+      description: null,
+    });
+    const onlyZero = repos.products.create({
+      category_id: emptyishCat,
+      type: "bebida",
+      price_minor: 0,
+      visible: true,
+      available: true,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: onlyZero,
+      lang: "es",
+      name: "Cero solo",
+      description: null,
+    });
+
+    const offerZero = repos.offers.create({
+      price_minor: 0,
+      visible: true,
+      available: true,
+      show_savings: false,
+      items: [{ product_id: paidInSame, quantity: 1 }],
+    });
+    repos.translations.upsert({
+      entity: "offer",
+      entity_id: offerZero,
+      lang: "es",
+      name: "Combo gratis",
+      description: null,
+    });
+    const offerPaid = repos.offers.create({
+      price_minor: 1200,
+      visible: true,
+      available: true,
+      show_savings: true,
+      items: [{ product_id: paidInSame, quantity: 1 }],
+    });
+    repos.translations.upsert({
+      entity: "offer",
+      entity_id: offerPaid,
+      lang: "es",
+      name: "Combo pago",
+      description: null,
+    });
+    repos.settings.bumpMenuRevision();
+
+    const res = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    const body = (await res.json()) as MenuResponse;
+    const allPids = body.categories.flatMap((c) => c.products.map((p) => p.id));
+    expect(allPids).not.toContain(zeroPid);
+    expect(allPids).not.toContain(onlyZero);
+    expect(allPids).toContain(paidInSame);
+    expect(body.categories.some((c) => c.id === emptyishCat)).toBe(false);
+    expect(body.categories.some((c) => c.id === catId)).toBe(true);
+    expect(body.offers.some((o) => o.id === offerZero)).toBe(false);
+    expect(body.offers.some((o) => o.id === offerPaid)).toBe(true);
+    // Admin sigue viendo el de precio 0
+    expect(repos.products.get(zeroPid)?.price_minor).toBe(0);
   });
 
   test("oculta productos no visibles", async () => {

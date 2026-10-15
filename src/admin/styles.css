@@ -75,16 +75,15 @@ textarea {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.sidebar__mark {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  background: var(--primary);
-  color: var(--on-primary);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   flex-shrink: 0;
+  display: block;
 }
 
 .sidebar__name {
@@ -382,6 +381,63 @@ label.field {
 .btn--danger {
   background: var(--error-bg);
   color: var(--error);
+}
+
+.danger-zone {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--error, #b70011) 10%, var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--error, #b70011) 28%, transparent);
+}
+
+.danger-zone__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--error, #b70011);
+}
+
+.page-toolbar {
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ajustes-panels > [hidden] {
+  display: none !important;
+}
+
+.ajustes-group {
+  margin-top: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--outline);
+}
+
+.ajustes-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ajustes-group__title {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.productos-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 1280px) {
+  .productos-filters {
+    flex-wrap: wrap;
+  }
 }
 .btn--sm {
   min-height: 2rem;

@@ -1,7 +1,23 @@
+import type { Currency as MoneyCurrency } from "../../shared/money";
+import { formatPrice } from "../../shared/money";
 import { type Currency, type Product, api } from "../api";
 import { BRAND } from "../brand";
 import { clear, el, formatRateUpdated, nameOf } from "../dom";
+import { openConfirm } from "../modal";
 import { showToast } from "../toast";
+
+function toMoney(c: Currency): MoneyCurrency {
+  return {
+    code: c.code,
+    symbol: c.symbol,
+    decimals: c.decimals,
+    isBase: c.isBase,
+    basePerUnit: c.basePerUnit,
+    rounding: (c.rounding as MoneyCurrency["rounding"]) || "none",
+    roundStep: c.roundStep,
+    symbolPosition: c.symbolPosition === "before" ? "before" : "after",
+  };
+}
 
 export async function renderInicio(root: HTMLElement): Promise<void> {
   const [currencies, products, settings, diag, net] = await Promise.all([
@@ -112,8 +128,22 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
         }),
         el("a", {
           className: "btn btn--ghost btn--sm",
-          text: "Red y QR",
+          text: "Imprimir QR",
           attrs: { href: "#/red" },
+        }),
+        el("a", {
+          className: "btn btn--ghost btn--sm",
+          text: "Nuevo producto",
+          attrs: { href: "#/productos?nuevo=1" },
+        }),
+        el("a", {
+          className: "btn btn--ghost btn--sm",
+          text: "Ver carta",
+          attrs: {
+            href: net.cartaUrl ?? "/",
+            target: "_blank",
+            rel: "noopener",
+          },
         }),
       ],
     }),
@@ -128,7 +158,7 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
   const toolbar = el("div", { className: "row" });
   const search = el("input", {
     className: "input grow",
-    attrs: { type: "search", placeholder: "Buscar producto…" },
+    attrs: { type: "search", placeholder: "Buscar producto…", "data-search": "" },
   }) as HTMLInputElement;
   const onlySold = el("label", {
     className: "row",
@@ -144,6 +174,12 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
     attrs: { type: "button" },
   });
   resetBtn.addEventListener("click", async () => {
+    const ok = await openConfirm({
+      title: "Marcar todo disponible",
+      message: "¿Poner todos los productos como disponibles?",
+      confirmLabel: "Marcar todo",
+    });
+    if (!ok) return;
     try {
       await api.post("/api/admin/products/reset-availability");
       showToast("Todos disponibles", "success");
@@ -192,7 +228,11 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
                 el("strong", { text: nameOf(p.i18n) }),
                 el("div", {
                   className: "muted tiny",
-                  text: `${p.priceMinor} ${base?.code ?? ""} · ${p.type}`,
+                  text: `${
+                    base
+                      ? formatPrice(p.priceMinor, toMoney(base), toMoney(base))
+                      : String(p.priceMinor)
+                  } · ${p.type}`,
                 }),
               ],
             }),

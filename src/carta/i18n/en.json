@@ -1,6 +1,8 @@
 {
   "offers": "Specials",
   "soldOut": "Sold out",
+  "soldOutCount": "sold out",
+  "showSoldOut": "Show sold out",
   "language": "Language",
   "currency": "Currency",
   "rateOfDay": "Today's rate",

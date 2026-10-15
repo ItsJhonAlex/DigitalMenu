@@ -82,6 +82,20 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
     const second = repos().settings.getJson<string | null>("carta.second_currency", null);
     const showRate = repos().settings.getJson<boolean>("carta.show_rate", true);
     const showImages = repos().settings.getJson<boolean>("carta.show_images", true);
+    const showSoldOut = repos().settings.getJson<boolean>("carta.show_soldout", true);
+    const soldOutCollapsed = repos().settings.getJson<boolean>("carta.soldout_collapsed", true);
+    const sectionsCollapsible = repos().settings.getJson<boolean>(
+      "carta.sections_collapsible",
+      false,
+    );
+    const sectionsOpenDefault = repos().settings.getJson<boolean>(
+      "carta.sections_open_default",
+      true,
+    );
+    const showSectionCounts = repos().settings.getJson<boolean>(
+      "carta.show_section_counts",
+      true,
+    );
 
     const list: CurrencyDto[] = currencies.map((c) => ({
       code: c.code,
@@ -113,14 +127,21 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
       .categories.list()
       .filter((c) => c.visible === 1);
     const visibleCatIds = new Set(visibleCats.map((c) => c.id));
+    // Precio base 0 (o negativo) → no sale en la carta; Admin sí los lista
     const productsInVisibleCats = repos()
       .products.list({ visible: true })
-      .filter((p) => visibleCatIds.has(p.category_id));
+      .filter((p) => {
+        if (!visibleCatIds.has(p.category_id) || p.price_minor <= 0) return false;
+        if (!showSoldOut && p.available !== 1) return false;
+        return true;
+      });
 
     const categoriesOut: MenuCategory[] = [];
     for (const cat of visibleCats) {
       const products: MenuProduct[] = productsInVisibleCats
         .filter((p) => p.category_id === cat.id)
+        // Disponibles primero, agotados al final; dentro de cada grupo se mantiene sort_order
+        .sort((a, b) => Number(b.available === 1) - Number(a.available === 1))
         .map((p) => {
           const t = pickText("product", p.id, lang);
           return {
@@ -148,6 +169,7 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
     const offersOut: MenuOffer[] = [];
     for (const o of repos().offers.list()) {
       if (o.visible !== 1) continue;
+      if (o.price_minor <= 0) continue;
       const t = pickText("offer", o.id, lang);
       const items = repos()
         .offers.items(o.id)
@@ -188,6 +210,11 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
       },
       restaurant,
       showImages,
+      showSoldOut,
+      soldOutCollapsed,
+      sectionsCollapsible,
+      sectionsOpenDefault,
+      showSectionCounts,
       ui: uiBase,
       offers: offersOut,
       categories: categoriesOut,

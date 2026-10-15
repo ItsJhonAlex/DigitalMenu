@@ -43,8 +43,9 @@ export async function renderRedQr(root: HTMLElement): Promise<void> {
     ipSelect.disabled = true;
   } else {
     for (const c of net.candidates) {
+      const mac = c.mac ? ` · MAC ${c.mac}` : "";
       const opt = el("option", {
-        text: `${c.address} · ${c.interface}${c.recommended ? " (recomendada)" : ""}`,
+        text: `${c.address} · ${c.interface}${mac}${c.recommended ? " (recomendada)" : ""}`,
         attrs: { value: c.address },
       });
       if ((net.savedIp ?? net.candidates.find((x) => x.recommended)?.address) === c.address) {

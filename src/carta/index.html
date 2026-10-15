@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#b70011" />
     <title>Avanzar In Time — Carta</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-512.png" />
+    <link rel="manifest" href="/assets/site.webmanifest" />
     <link rel="stylesheet" href="/carta/styles.css" />
   </head>
   <body>
@@ -12,11 +16,17 @@
       <header class="top" id="top">
         <div class="top__row">
           <div class="brand">
-            <div class="brand__mark" aria-hidden="true">A</div>
-            <div class="brand__text">
-              <h1 class="brand__name" id="restaurant-name">Avanzar In Time</h1>
-              <p class="brand__tag" id="welcome"></p>
-            </div>
+            <img
+              class="brand__logo"
+              id="brand-logo"
+              src="/assets/wordmark-transparent.png"
+              alt="Avanzar In Time"
+              width="168"
+              height="40"
+              decoding="async"
+            />
+            <h1 class="brand__name visually-hidden" id="restaurant-name">Avanzar In Time</h1>
+            <p class="brand__tag" id="welcome"></p>
           </div>
           <div class="controls">
             <div class="seg" id="lang-seg" role="group" aria-label="Idioma"></div>

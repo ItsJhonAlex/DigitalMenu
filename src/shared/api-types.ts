@@ -88,6 +88,16 @@ export type MenuResponse = {
   };
   /** Si false, la carta usa vista solo texto (sin huecos de foto). */
   showImages: boolean;
+  /** Si false, no se listan productos agotados en la carta. */
+  showSoldOut: boolean;
+  /** Si true, agotados van en «Ver agotados (n)»; si false, al final de la sección sin botón. */
+  soldOutCollapsed: boolean;
+  /** Si true, cada sección de categoría/ofertas es colapsable. */
+  sectionsCollapsible: boolean;
+  /** Si sectionsCollapsible, secciones abiertas al cargar. */
+  sectionsOpenDefault: boolean;
+  /** Si true, el título de sección muestra conteo de platos / agotados. */
+  showSectionCounts: boolean;
   ui: Record<string, string>;
   offers: MenuOffer[];
   categories: MenuCategory[];

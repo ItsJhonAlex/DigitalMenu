@@ -111,7 +111,7 @@ function renderTextLine(opts: {
   const titleWrap = el("div", { className: "menu-line__title" });
   titleWrap.appendChild(el("h3", { text: opts.name }));
   if (!opts.available) {
-    titleWrap.appendChild(el("span", { className: "badge", text: opts.soldOut }));
+    titleWrap.appendChild(el("span", { className: "badge badge--sold", text: opts.soldOut }));
   }
   const dots = el("span", {
     className: "menu-line__dots",
@@ -163,7 +163,7 @@ function renderPhotoCard(
     body.appendChild(el("h3", { text: p.name }));
     if (p.description) body.appendChild(el("p", { text: p.description }));
     body.appendChild(
-      priceBlock(prices, !p.available ? [el("span", { className: "badge", text: soldOut })] : []),
+      priceBlock(prices, !p.available ? [el("span", { className: "badge badge--sold", text: soldOut })] : []),
     );
     card.appendChild(body);
     bindOpen(card, p, onOpen);
@@ -181,7 +181,7 @@ function renderPhotoCard(
         mediaEl.appendChild(
           el("div", {
             className: "card__sold",
-            children: [el("span", { text: soldOut.toUpperCase() })],
+            children: [el("span", { text: soldOut })],
           }),
         );
       }
@@ -191,7 +191,7 @@ function renderPhotoCard(
     body.appendChild(el("h3", { text: p.name }));
     if (p.description) body.appendChild(el("p", { text: p.description }));
     if (!p.available && !img) {
-      body.appendChild(el("span", { className: "badge", text: soldOut }));
+      body.appendChild(el("span", { className: "badge badge--sold", text: soldOut }));
     }
     body.appendChild(priceBlock(prices));
     card.appendChild(body);
@@ -207,7 +207,7 @@ function renderPhotoCard(
       mediaEl.appendChild(
         el("div", {
           className: "card__sold",
-          children: [el("span", { text: soldOut.toUpperCase() })],
+          children: [el("span", { text: soldOut })],
         }),
       );
     }
@@ -217,7 +217,7 @@ function renderPhotoCard(
   body.appendChild(el("h3", { text: p.name }));
   if (p.description) body.appendChild(el("p", { text: p.description }));
   if (!p.available && !img) {
-    body.appendChild(el("span", { className: "badge", text: soldOut }));
+    body.appendChild(el("span", { className: "badge badge--sold", text: soldOut }));
   }
   body.appendChild(priceBlock(prices));
   card.appendChild(body);
@@ -306,7 +306,7 @@ export function renderProductDetail(
   body.appendChild(el("h2", { text: p.name }));
   if (p.description) body.appendChild(el("p", { text: p.description }));
   if (!p.available) {
-    body.appendChild(el("span", { className: "badge", text: menu.ui.soldOut ?? "Agotado" }));
+    body.appendChild(el("span", { className: "badge badge--sold", text: menu.ui.soldOut ?? "Agotado" }));
   }
   body.appendChild(priceBlock(prices));
   sheet.appendChild(body);
@@ -359,7 +359,7 @@ export function renderOfferCard(o: MenuOffer, menu: MenuResponse, currency: stri
       mediaEl.appendChild(
         el("div", {
           className: "card__sold",
-          children: [el("span", { text: soldOut.toUpperCase() })],
+          children: [el("span", { text: soldOut })],
         }),
       );
     }
@@ -383,33 +383,19 @@ export function renderOfferCard(o: MenuOffer, menu: MenuResponse, currency: stri
   return card;
 }
 
-export function renderCategorySection(
-  cat: MenuCategory,
+function appendProductsToRoot(
+  root: HTMLElement,
+  products: MenuProduct[],
   menu: MenuResponse,
   currency: string,
   onOpen?: (product: MenuProduct) => void,
-): HTMLElement {
-  const allList = cat.products.every((p) => productShowsAsList(p, menu));
-  const section = el("section", {
-    className: allList || !menu.showImages ? "section--text" : undefined,
-    attrs: { id: `cat-${cat.id}` },
-  });
-  section.appendChild(
-    el("div", {
-      className: "section__head",
-      children: [el("h2", { text: cat.name })],
-    }),
-  );
-
-  const root = el("div", { className: "section__items" });
-
-  // Agrupa ítems sin foto en bloques de lista (aunque la carta tenga fotos activas)
+): void {
   let listGroup: HTMLElement | null = null;
   const flushList = () => {
     listGroup = null;
   };
 
-  for (const p of cat.products) {
+  for (const p of products) {
     if (productShowsAsList(p, menu)) {
       if (!listGroup) {
         listGroup = el("div", { className: "section__items--text" });
@@ -421,7 +407,100 @@ export function renderCategorySection(
       root.appendChild(renderProductCard(p, menu, currency, layoutForProduct(p), onOpen));
     }
   }
+}
 
-  section.appendChild(root);
+export function formatSectionCount(
+  availableCount: number,
+  soldOutCount: number,
+  ui: Record<string, string>,
+): string {
+  const soldWord = ui.soldOutCount ?? "agotados";
+  if (soldOutCount > 0) return `${availableCount} · ${soldOutCount} ${soldWord}`;
+  return String(availableCount);
+}
+
+/** Título (+ conteo opcional) y cuerpo; si collapsible, envuelve en <details>. */
+export function attachSectionBody(
+  section: HTMLElement,
+  opts: {
+    title: string;
+    countLabel: string | null;
+    collapsible: boolean;
+    openDefault: boolean;
+    body: HTMLElement;
+  },
+): void {
+  const headChildren: HTMLElement[] = [el("h2", { text: opts.title })];
+  if (opts.countLabel) {
+    headChildren.push(el("span", { className: "section__count", text: opts.countLabel }));
+  }
+  if (opts.collapsible) {
+    const details = el("details", { className: "section-fold" }) as HTMLDetailsElement;
+    if (opts.openDefault) details.open = true;
+    details.appendChild(
+      el("summary", {
+        className: "section__head section__head--fold",
+        children: headChildren,
+      }),
+    );
+    details.appendChild(opts.body);
+    section.appendChild(details);
+  } else {
+    section.appendChild(el("div", { className: "section__head", children: headChildren }));
+    section.appendChild(opts.body);
+  }
+}
+
+export function renderCategorySection(
+  cat: MenuCategory,
+  menu: MenuResponse,
+  currency: string,
+  onOpen?: (product: MenuProduct) => void,
+): HTMLElement {
+  const available = cat.products.filter((p) => p.available);
+  const soldOut = menu.showSoldOut ? cat.products.filter((p) => !p.available) : [];
+  const visibleForLayout = [...available, ...soldOut];
+  const allList =
+    visibleForLayout.length > 0 && visibleForLayout.every((p) => productShowsAsList(p, menu));
+  const section = el("section", {
+    className: allList || !menu.showImages ? "section--text" : undefined,
+    attrs: { id: `cat-${cat.id}` },
+  });
+
+  const root = el("div", { className: "section__items" });
+  appendProductsToRoot(root, available, menu, currency, onOpen);
+
+  if (soldOut.length > 0) {
+    if (menu.soldOutCollapsed) {
+      // Colapsados: bloque «Ver agotados (n)»
+      const label = menu.ui.showSoldOut ?? "Ver agotados";
+      const details = el("details", { className: "soldout-fold" });
+      details.appendChild(
+        el("summary", {
+          className: "soldout-fold__summary",
+          text: `${label} (${soldOut.length})`,
+        }),
+      );
+      const foldBody = el("div", { className: "soldout-fold__body section__items" });
+      appendProductsToRoot(foldBody, soldOut, menu, currency, onOpen);
+      details.appendChild(foldBody);
+      root.appendChild(details);
+    } else {
+      // Sin colapsar: agotados al final, con separación del último disponible
+      const tail = el("div", { className: "soldout-tail section__items" });
+      appendProductsToRoot(tail, soldOut, menu, currency, onOpen);
+      root.appendChild(tail);
+    }
+  }
+
+  attachSectionBody(section, {
+    title: cat.name,
+    countLabel: menu.showSectionCounts
+      ? formatSectionCount(available.length, soldOut.length, menu.ui)
+      : null,
+    collapsible: menu.sectionsCollapsible,
+    openDefault: menu.sectionsOpenDefault,
+    body: root,
+  });
   return section;
 }
