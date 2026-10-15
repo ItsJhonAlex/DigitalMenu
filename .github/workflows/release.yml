@@ -27,6 +27,12 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      # Evita CRLF en el checkout de windows-latest (Biome exige LF)
+      - name: Git LF
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
