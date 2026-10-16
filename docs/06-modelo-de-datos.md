@@ -155,9 +155,14 @@ Regla: `es` siempre existe y `active = 1` (trigger `languages_protect_es`).
 | `available` | INTEGER | NOT NULL DEFAULT 1, CHECK 0/1 | Disponible (1) / agotado (0), RF-16 |
 | `visible` | INTEGER | NOT NULL DEFAULT 1, CHECK 0/1 | RF-18 |
 | `sort_order` | INTEGER | NOT NULL DEFAULT 0 | Orden dentro de la categoría |
+| `ingredients_es` | TEXT | NULL | Ingredientes (texto libre, ES); migración `003` |
+| `ingredients_en` | TEXT | NULL | Ingredientes (EN); si vacío, la carta usa ES |
+| `allergens` | TEXT | NULL | JSON de códigos UE, p. ej. `["gluten","lacteos"]` |
 | `created_at`, `updated_at` | TEXT | NOT NULL DEFAULT now | |
 
 Índices: `idx_products_category_order (category_id, sort_order)`.
+
+Códigos de alérgeno admitidos (14 UE): `gluten`, `crustaceos`, `huevo`, `pescado`, `cacahuete`, `soja`, `lacteos`, `frutos_cascara`, `apio`, `mostaza`, `sesamo`, `sulfitos`, `altramuces`, `moluscos`.
 
 ### 3.4 `offers`
 
@@ -304,6 +309,10 @@ CREATE TABLE products (
   available   INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0,1)),
   visible     INTEGER NOT NULL DEFAULT 1 CHECK (visible IN (0,1)),
   sort_order  INTEGER NOT NULL DEFAULT 0,
+  -- 003_product_ingredients:
+  ingredients_es TEXT,
+  ingredients_en TEXT,
+  allergens      TEXT, -- JSON ["gluten","lacteos",…]
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );

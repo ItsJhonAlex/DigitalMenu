@@ -7,5 +7,8 @@
   "currency": "Currency",
   "rateOfDay": "Today's rate",
   "empty": "The menu has no items yet.",
-  "all": "All"
+  "all": "All",
+  "ingredients": "Ingredients",
+  "allergens": "Allergens",
+  "allergensConsult": "Please ask staff about allergens"
 }

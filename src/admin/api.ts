@@ -83,6 +83,9 @@ export type Product = {
   available: boolean;
   visible: boolean;
   sortOrder: number;
+  ingredientsEs: string | null;
+  ingredientsEn: string | null;
+  allergens: string[] | null;
   i18n: I18nMap;
   missingLangs: string[];
   inOffers: number[];

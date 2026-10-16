@@ -1,3 +1,9 @@
+import {
+  type AllergenCode,
+  emptyToNull,
+  normalizeAllergensInput,
+  serializeAllergens,
+} from "../../shared/allergens";
 import type { Repos } from "../db/repos";
 import { validationError } from "./errors";
 
@@ -170,4 +176,39 @@ export function loadI18n(
     out[r.lang] = { name: r.name, description: r.description };
   }
   return out;
+}
+
+/** Texto libre de ingredientes: string vacío / null → null; undefined → omitir. */
+export function parseOptionalIngredients(
+  v: unknown,
+  field: string,
+  maxLen = 2000,
+): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (typeof v !== "string") {
+    throw validationError(`${field} debe ser string o null`, [{ field, issue: "type" }]);
+  }
+  const t = emptyToNull(v);
+  if (t != null && t.length > maxLen) {
+    throw validationError(`${field} demasiado largo`, [{ field, issue: "max" }]);
+  }
+  return t;
+}
+
+/**
+ * Alérgenos UE: array de códigos, string CSV, o null.
+ * undefined → omitir; vacío → null (JSON null en DB).
+ */
+export function parseOptionalAllergens(v: unknown, field = "allergens"): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (typeof v === "string" && v.trim() === "") return null;
+  const parsed = normalizeAllergensInput(v);
+  if (!parsed.ok) {
+    throw validationError(`Alérgeno inválido: ${parsed.invalid.join(", ")}`, [
+      { field, issue: "enum" },
+    ]);
+  }
+  return serializeAllergens(parsed.codes as AllergenCode[]);
 }

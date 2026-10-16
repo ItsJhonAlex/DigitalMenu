@@ -102,6 +102,11 @@
 | GET | `/api/admin/backups/:file` | Descargar copia | RF-51 |
 | POST | `/api/admin/backups/restore` | Restaurar (archivo existente o subido) | RF-52 |
 | GET | `/api/admin/diagnostics` | Versión, RAM, uptime, rutas, log | RF-55 |
+| GET | `/api/admin/catalog/export?format=xlsx\|csv` | Exportar carta (hojas `categories`, `products`, `translations`, `ayuda`) | |
+| POST | `/api/admin/catalog/import/preview` | Preview multipart del Excel/CSV | |
+| POST | `/api/admin/catalog/import/apply` | Aplicar plan tras preview | |
+
+**Import/export de productos — columnas opcionales** en la hoja `products`: `ingredientes_es`, `ingredientes_en`, `alergenos` (códigos UE separados por comas, p. ej. `gluten,lacteos,frutos_cascara`). La hoja `ayuda` del Excel documenta los 14 códigos; no se importa. Plantilla y tabla de códigos: [`docs/plantillas/`](plantillas/README.md).
 
 ---
 
@@ -285,6 +290,9 @@ Respuesta **200**: `{ "ok": true }`. Valida que `ids` contenga **todas** las cat
   "image": "3a4b5c6d7e8f9a0b",
   "available": true,
   "visible": true,
+  "ingredientsEs": "ron blanco, hierbabuena, lima, azúcar, soda",
+  "ingredientsEn": "white rum, mint, lime, sugar, soda",
+  "allergens": ["sulfitos"],
   "i18n": {
     "es": { "name": "Mojito", "description": "Ron blanco, hierbabuena, lima y soda" },
     "en": { "name": "Mojito", "description": "White rum, mint, lime and soda" }
@@ -292,7 +300,7 @@ Respuesta **200**: `{ "ok": true }`. Valida que `ids` contenga **todas** las cat
 }
 ```
 
-Respuesta **201**: el producto completo con `id`, `sortOrder` (al final de su categoría), `createdAt`, `updatedAt`.
+Respuesta **201**: el producto completo con `id`, `sortOrder` (al final de su categoría), `ingredientsEs`, `ingredientsEn`, `allergens`, `createdAt`, `updatedAt`.
 
 Validaciones:
 
@@ -302,9 +310,13 @@ Validaciones:
 | `type` | `comida` \| `bebida` \| `articulo` |
 | `priceMinor` | Entero 0 … 1.000.000.000 |
 | `image` | `null` o hash existente en `data\images` |
+| `ingredientsEs` / `ingredientsEn` | Opcional; string o `null`; vacío → `null` |
+| `allergens` | Opcional; array de códigos UE o `null`; vacío → `null`; código desconocido → 400 |
 | `i18n.es.name` | 1–80 caracteres (obligatorio) |
 | `i18n.*.description` | ≤ 500 |
 | `i18n.<lang>` | Solo idiomas existentes |
+
+Códigos de `allergens`: `gluten`, `crustaceos`, `huevo`, `pescado`, `cacahuete`, `soja`, `lacteos`, `frutos_cascara`, `apio`, `mostaza`, `sesamo`, `sulfitos`, `altramuces`, `moluscos`.
 
 **Cambiar disponibilidad** — `PATCH /api/admin/products/21`
 
@@ -548,7 +560,7 @@ Si falta configurar el wifi → 409 `{"error":{"code":"CONFLICT","message":"Conf
   "memory": { "rssMB": 58.2, "heapUsedMB": 12.4 },
   "dbBytes": 512000,
   "imagesBytes": 23400000,
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "logTail": ["2026-10-13T08:00:00Z INFO backup created menu-20261013-0400.db"]
 }
 ```
@@ -571,6 +583,8 @@ export interface CurrencyDTO {
 
 export interface MenuProduct {
   id: number; type: ProductType; name: string; description: string | null;
+  ingredients: string | null; // idioma actual con fallback a ES
+  allergens: string[];        // códigos UE; etiquetas en ui["allergen.<code>"]
   priceMinor: number; available: boolean;
   image: { thumb: string; large: string } | null; fallback: boolean;
 }

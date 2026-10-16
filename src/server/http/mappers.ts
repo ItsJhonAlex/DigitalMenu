@@ -1,4 +1,5 @@
-import type { CurrencyRow } from "../db/types";
+import { parseAllergensJson } from "../../shared/allergens";
+import type { CurrencyRow, ProductRow } from "../db/types";
 import type { I18nMap } from "./validate";
 
 export function currencyDto(row: CurrencyRow) {
@@ -43,21 +44,11 @@ export function categoryDto(
 }
 
 export function productDto(
-  row: {
-    id: number;
-    category_id: number;
-    type: string;
-    price_minor: number;
-    image: string | null;
-    available: number;
-    visible: number;
-    sort_order: number;
-    created_at: string;
-    updated_at: string;
-  },
+  row: ProductRow,
   i18n: I18nMap,
   extra?: { missingLangs?: string[]; inOffers?: number[] },
 ) {
+  const allergens = parseAllergensJson(row.allergens);
   return {
     id: row.id,
     categoryId: row.category_id,
@@ -67,6 +58,9 @@ export function productDto(
     available: row.available === 1,
     visible: row.visible === 1,
     sortOrder: row.sort_order,
+    ingredientsEs: row.ingredients_es,
+    ingredientsEn: row.ingredients_en,
+    allergens: allergens.length > 0 ? allergens : null,
     i18n,
     missingLangs: extra?.missingLangs ?? [],
     inOffers: extra?.inOffers ?? [],

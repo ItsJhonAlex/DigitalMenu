@@ -120,6 +120,53 @@ describe("API admin", () => {
     expect(patched.available).toBe(false);
   });
 
+  test("producto acepta ingredientes y alérgenos; inválido → 400", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.list()[0]!.id;
+    const headers = {
+      "Content-Type": "application/json",
+      Origin: "http://localhost:8080",
+      Host: "localhost:8080",
+    };
+
+    const created = await app.request("http://localhost:8080/api/admin/products", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        categoryId: catId,
+        type: "comida",
+        priceMinor: 1200,
+        ingredientsEs: "tomate, mozzarella",
+        ingredientsEn: "",
+        allergens: ["gluten", "lacteos"],
+        i18n: { es: { name: "Pizza", description: null } },
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      id: number;
+      ingredientsEs: string | null;
+      ingredientsEn: string | null;
+      allergens: string[] | null;
+    };
+    expect(body.ingredientsEs).toBe("tomate, mozzarella");
+    expect(body.ingredientsEn).toBeNull();
+    expect(body.allergens).toEqual(["gluten", "lacteos"]);
+
+    const bad = await app.request(`http://localhost:8080/api/admin/products/${body.id}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        categoryId: catId,
+        type: "comida",
+        priceMinor: 1200,
+        allergens: ["gluten", "uranio"],
+        i18n: { es: { name: "Pizza", description: null } },
+      }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
   test("tasa de moneda y conflicto al borrar categoría con productos", async () => {
     const { app, repos } = setup();
     const catId = repos.categories.list()[0]!.id;
@@ -158,7 +205,7 @@ describe("API admin", () => {
     });
     expect(diag.status).toBe(200);
     const d = (await diag.json()) as { schemaVersion: number; version: string };
-    expect(d.schemaVersion).toBe(2);
+    expect(d.schemaVersion).toBe(3);
 
     const put = await app.request("http://localhost:8080/api/admin/settings", {
       method: "PUT",

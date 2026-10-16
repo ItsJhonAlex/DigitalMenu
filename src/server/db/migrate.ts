@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ensureBackupsDir, preMigrationBackupFileName, vacuumInto } from "../services/backup";
 import initSql from "./migrations/001_init.sql" with { type: "text" };
 import seedSql from "./migrations/002_seed.sql" with { type: "text" };
+import ingredientsSql from "./migrations/003_product_ingredients.sql" with { type: "text" };
 
 export type Migration = {
   version: number;
@@ -14,6 +15,7 @@ export type Migration = {
 export const MIGRATIONS: Migration[] = [
   { version: 1, name: "001_init", sql: initSql },
   { version: 2, name: "002_seed", sql: seedSql },
+  { version: 3, name: "003_product_ingredients", sql: ingredientsSql },
 ];
 
 /** Versión máxima de esquema que conoce esta build (RF-52). */

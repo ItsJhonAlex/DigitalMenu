@@ -27,6 +27,10 @@ export type ProductRow = {
   available: number;
   visible: number;
   sort_order: number;
+  ingredients_es: string | null;
+  ingredients_en: string | null;
+  /** JSON array de códigos UE, p. ej. `["gluten","lacteos"]`, o null. */
+  allergens: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -10,20 +10,22 @@ export type ProductFilter = {
   untranslated?: string;
 };
 
+const PRODUCT_COLS = `id, category_id, type, price_minor, image, available, visible, sort_order,
+            ingredients_es, ingredients_en, allergens, created_at, updated_at`;
+
 export function createProductsRepo(db: Database) {
-  const getStmt = db.prepare(
-    `SELECT id, category_id, type, price_minor, image, available, visible, sort_order,
-            created_at, updated_at
-     FROM products WHERE id = ?`,
-  );
+  const getStmt = db.prepare(`SELECT ${PRODUCT_COLS} FROM products WHERE id = ?`);
   const insertStmt = db.prepare(
-    `INSERT INTO products (category_id, type, price_minor, image, available, visible, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (
+       category_id, type, price_minor, image, available, visible, sort_order,
+       ingredients_es, ingredients_en, allergens
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE products
      SET category_id = ?, type = ?, price_minor = ?, image = ?, available = ?, visible = ?,
-         sort_order = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         sort_order = ?, ingredients_es = ?, ingredients_en = ?, allergens = ?,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
      WHERE id = ?`,
   );
   const setAvailableStmt = db.prepare(
@@ -106,7 +108,8 @@ export function createProductsRepo(db: Database) {
 
       const sql = `
         SELECT p.id, p.category_id, p.type, p.price_minor, p.image, p.available, p.visible,
-               p.sort_order, p.created_at, p.updated_at
+               p.sort_order, p.ingredients_es, p.ingredients_en, p.allergens,
+               p.created_at, p.updated_at
         FROM products p
         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
         ORDER BY p.category_id, p.sort_order, p.id
@@ -121,6 +124,9 @@ export function createProductsRepo(db: Database) {
       available?: boolean;
       visible?: boolean;
       sort_order?: number;
+      ingredients_es?: string | null;
+      ingredients_en?: string | null;
+      allergens?: string | null;
     }): number {
       const r = insertStmt.run(
         input.category_id,
@@ -130,6 +136,9 @@ export function createProductsRepo(db: Database) {
         input.available === false ? 0 : 1,
         input.visible === false ? 0 : 1,
         input.sort_order ?? this.nextSortOrder(input.category_id),
+        input.ingredients_es ?? null,
+        input.ingredients_en ?? null,
+        input.allergens ?? null,
       );
       return Number(r.lastInsertRowid);
     },
@@ -143,6 +152,9 @@ export function createProductsRepo(db: Database) {
         available: boolean;
         visible: boolean;
         sort_order: number;
+        ingredients_es: string | null;
+        ingredients_en: string | null;
+        allergens: string | null;
       },
     ): boolean {
       const r = updateStmt.run(
@@ -153,6 +165,9 @@ export function createProductsRepo(db: Database) {
         input.available ? 1 : 0,
         input.visible ? 1 : 0,
         input.sort_order,
+        input.ingredients_es,
+        input.ingredients_en,
+        input.allergens,
         id,
       );
       return r.changes > 0;

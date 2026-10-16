@@ -5,6 +5,14 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  ALLERGEN_CODES,
+  ALLERGEN_LABELS,
+  emptyToNull,
+  normalizeAllergensInput,
+  parseAllergensJson,
+  serializeAllergens,
+} from "../../shared/allergens";
 import type { Repos } from "../db/repos";
 import { ensureBackupsDir, preImportBackupFileName, vacuumInto } from "./backup";
 import {
@@ -61,6 +69,10 @@ type ProductPlan = {
   visible: boolean;
   sort_order: number;
   image: string | null;
+  /** undefined = columna ausente (no tocar en update). */
+  ingredients_es?: string | null;
+  ingredients_en?: string | null;
+  allergens?: string | null;
   i18n: Record<string, { name: string; description: string | null }>;
   label: string;
   row: number;
@@ -95,6 +107,9 @@ const PROD_HEADERS = [
   "description_es",
   "name_en",
   "description_en",
+  "ingredientes_es",
+  "ingredientes_en",
+  "alergenos",
 ] as const;
 
 const TR_HEADERS = ["entity", "entity_id", "lang", "name", "description"] as const;
@@ -151,6 +166,7 @@ export function buildCatalogSheets(repos: Repos): Sheet[] {
   for (const p of repos.products.list()) {
     const es = repos.translations.get("product", p.id, "es");
     const en = repos.translations.get("product", p.id, "en");
+    const allergenCodes = parseAllergensJson(p.allergens);
     prodRows.push([
       String(p.id),
       String(p.category_id),
@@ -164,6 +180,9 @@ export function buildCatalogSheets(repos: Repos): Sheet[] {
       es?.description ?? "",
       en?.name ?? "",
       en?.description ?? "",
+      p.ingredients_es ?? "",
+      p.ingredients_en ?? "",
+      allergenCodes.join(","),
     ]);
   }
 
@@ -176,10 +195,28 @@ export function buildCatalogSheets(repos: Repos): Sheet[] {
     }
   }
 
+  // Hoja de ayuda (no se importa): columnas nuevas + códigos UE
+  const ayudaRows: string[][] = [
+    ["tema", "detalle"],
+    [
+      "columnas_productos",
+      "ingredientes_es, ingredientes_en (texto libre, comas) y alergenos (códigos separados por comas). Opcionales: un Excel viejo sin ellas sigue importando.",
+    ],
+    [
+      "alergenos_formato",
+      "Ejemplo: gluten,lacteos,frutos_cascara  — solo códigos de la lista; inválidos rechazan la fila.",
+    ],
+    ...ALLERGEN_CODES.map((code) => [
+      `alergeno_${code}`,
+      `${code} = ${ALLERGEN_LABELS[code].es} / ${ALLERGEN_LABELS[code].en}`,
+    ]),
+  ];
+
   return [
     { name: "categories", rows: catRows },
     { name: "products", rows: prodRows },
     { name: "translations", rows: trRows },
+    { name: "ayuda", rows: ayudaRows },
   ];
 }
 
@@ -372,6 +409,28 @@ function parseProductsSheet(
     if (nameEn) {
       i18n.en = { name: nameEn, description: (m.description_en ?? "").trim() || null };
     }
+
+    const hasIngEs = headerIndex(header, "ingredientes_es") >= 0;
+    const hasIngEn = headerIndex(header, "ingredientes_en") >= 0;
+    const hasAlergenos = headerIndex(header, "alergenos") >= 0;
+    let ingredients_es: string | null | undefined;
+    let ingredients_en: string | null | undefined;
+    let allergens: string | null | undefined;
+    if (hasIngEs) ingredients_es = emptyToNull(m.ingredientes_es);
+    if (hasIngEn) ingredients_en = emptyToNull(m.ingredientes_en);
+    if (hasAlergenos) {
+      const parsed = normalizeAllergensInput(m.alergenos ?? "");
+      if (!parsed.ok) {
+        errors.push({
+          sheet: sheet.name,
+          row: rowNum,
+          message: `alergenos inválidos: ${parsed.invalid.join(", ")}`,
+        });
+        continue;
+      }
+      allergens = serializeAllergens(parsed.codes);
+    }
+
     plans.push({
       action,
       id,
@@ -382,6 +441,9 @@ function parseProductsSheet(
       visible: boolCell(m.visible, true),
       sort_order: intCell(m.sort_order, 0) ?? 0,
       image,
+      ingredients_es,
+      ingredients_en,
+      allergens,
       i18n,
       label: nameEs,
       row: rowNum,
@@ -554,6 +616,9 @@ export function applyCatalogImport(
           available: p.available,
           visible: p.visible,
           sort_order: p.sort_order,
+          ingredients_es: p.ingredients_es ?? null,
+          ingredients_en: p.ingredients_en ?? null,
+          allergens: p.allergens ?? null,
         });
         for (const [lang, t] of Object.entries(p.i18n)) {
           repos.translations.upsert({
@@ -576,6 +641,11 @@ export function applyCatalogImport(
           available: p.available,
           visible: p.visible,
           sort_order: p.sort_order,
+          ingredients_es:
+            p.ingredients_es !== undefined ? p.ingredients_es : existing.ingredients_es,
+          ingredients_en:
+            p.ingredients_en !== undefined ? p.ingredients_en : existing.ingredients_en,
+          allergens: p.allergens !== undefined ? p.allergens : existing.allergens,
         });
         for (const [lang, t] of Object.entries(p.i18n)) {
           repos.translations.upsert({

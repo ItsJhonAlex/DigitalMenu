@@ -90,6 +90,8 @@ Objetivo: las tareas **diarias** en una pantalla.
 │ └───────────────────────────────────────────────────────────────┘ │
 │ Foto: [ 🖼 vista previa ]  [Cambiar…] [Quitar]   (arrastrar aquí)  │
 │ ☑ Disponible   ☑ Visible en la carta                               │
+│ ▸ Ingredientes y alérgenos (opcional)                              │
+│   (cerrado por defecto; ES/EN + chips de los 14 alérgenos UE)      │
 │                                          [Cancelar] [Guardar]      │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -97,6 +99,7 @@ Objetivo: las tareas **diarias** en una pantalla.
 - El campo de precio muestra en vivo la conversión a las demás monedas activas (RF-27/28).
 - La foto se comprime en el navegador antes de subir; se muestra el tamaño resultante ("4,1 MB → 96 KB") (RF-20).
 - Validaciones en línea: nombre ES obligatorio, precio entero/decimal válido ≥ 0.
+- Ingredientes/alérgenos son opcionales (botellas/tragos pueden quedar vacíos). Códigos e import Excel: [`docs/plantillas/`](plantillas/README.md).
 
 ### A.4 Ofertas
 

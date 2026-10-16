@@ -28,6 +28,7 @@ Todo corre en **un único proceso**: `MenuDigital.exe`, compilado con Bun (TypeS
 | 08 | [Hoja de ruta](08-roadmap.md) | Fases, hitos y tareas |
 | 09 | [Despliegue y operación](09-despliegue-y-operacion.md) | Build, instalación en el POS, autoarranque, copias de seguridad, actualizaciones, IP fija |
 | 10 | [Glosario y decisiones](10-glosario-y-decisiones.md) | Glosario y registro de decisiones (ADR) |
+| — | [Plantillas de importación](plantillas/README.md) | Columnas Excel/CSV y códigos de alérgenos UE |
 
 ## Datos clave (resumen)
 

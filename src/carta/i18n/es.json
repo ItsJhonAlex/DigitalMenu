@@ -7,5 +7,8 @@
   "currency": "Moneda",
   "rateOfDay": "Tasa del día",
   "empty": "La carta aún no tiene productos.",
-  "all": "Todo"
+  "all": "Todo",
+  "ingredients": "Ingredientes",
+  "allergens": "Alérgenos",
+  "allergensConsult": "Consulte al personal sobre alérgenos"
 }

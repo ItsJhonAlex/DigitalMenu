@@ -175,7 +175,14 @@ describe("catalog export/import", () => {
   test("export xlsx y preview update por id", () => {
     const { repos, db } = setup();
     const sheets = buildCatalogSheets(repos);
-    expect(sheets.map((s) => s.name)).toEqual(["categories", "products", "translations"]);
+    expect(sheets.map((s) => s.name)).toEqual(["categories", "products", "translations", "ayuda"]);
+    const ayuda = sheets.find((s) => s.name === "ayuda")!;
+    expect(ayuda.rows.some((r) => r[0] === "alergeno_gluten")).toBe(true);
+    expect(ayuda.rows.some((r) => r[0] === "alergeno_frutos_cascara")).toBe(true);
+    const prodHeader = sheets.find((s) => s.name === "products")!.rows[0]!;
+    expect(prodHeader).toContain("ingredientes_es");
+    expect(prodHeader).toContain("ingredientes_en");
+    expect(prodHeader).toContain("alergenos");
     const cat = repos.categories.list()[0]!;
     const es = repos.translations.get("category", cat.id, "es");
     const exportBytes = exportCatalog(repos, "xlsx").bytes;
@@ -225,6 +232,117 @@ describe("catalog export/import", () => {
       .list({ categoryId: catId })
       .some((p) => repos.translations.get("product", p.id, "es")?.name === "Nuevo CSV");
     expect(found).toBe(true);
+  });
+
+  test("Excel antiguo sin columnas de ingredientes sigue importando", () => {
+    const { repos, db } = setup();
+    const catId = repos.categories.list()[0]!.id;
+    const existing = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 500,
+      ingredients_es: "no borrar",
+      allergens: JSON.stringify(["gluten"]),
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: existing,
+      lang: "es",
+      name: "Viejo",
+      description: null,
+    });
+    // Cabeceras antiguas (sin ingredientes_*) + update por id
+    const csv = toCsv([
+      [
+        "id",
+        "category_id",
+        "type",
+        "price_minor",
+        "available",
+        "visible",
+        "sort_order",
+        "image",
+        "name_es",
+        "description_es",
+        "name_en",
+        "description_en",
+      ],
+      [
+        String(existing),
+        String(catId),
+        "comida",
+        "600",
+        "1",
+        "1",
+        "10",
+        "",
+        "Viejo renombrado",
+        "",
+        "",
+        "",
+      ],
+    ]);
+    const sheets = parseCatalogFile("products.csv", new TextEncoder().encode(csv));
+    const preview = previewCatalogImport(repos, sheets);
+    expect(preview.errors).toEqual([]);
+    applyCatalogImport(db, repos, preview.plan);
+    const row = repos.products.get(existing)!;
+    expect(row.price_minor).toBe(600);
+    expect(row.ingredients_es).toBe("no borrar");
+    expect(row.allergens).toBe(JSON.stringify(["gluten"]));
+    expect(repos.translations.get("product", existing, "es")?.name).toBe("Viejo renombrado");
+  });
+
+  test("import con ingredientes y alergenos", () => {
+    const { repos, db } = setup();
+    const catId = repos.categories.list()[0]!.id;
+    const csv = toCsv([
+      [
+        "id",
+        "category_id",
+        "type",
+        "price_minor",
+        "available",
+        "visible",
+        "sort_order",
+        "image",
+        "name_es",
+        "description_es",
+        "name_en",
+        "description_en",
+        "ingredientes_es",
+        "ingredientes_en",
+        "alergenos",
+      ],
+      [
+        "",
+        String(catId),
+        "comida",
+        "1800",
+        "1",
+        "1",
+        "0",
+        "",
+        "Tarta",
+        "",
+        "Cake",
+        "",
+        "harina, huevo",
+        "flour, egg",
+        "gluten, huevo",
+      ],
+    ]);
+    const sheets = parseCatalogFile("products.csv", new TextEncoder().encode(csv));
+    const preview = previewCatalogImport(repos, sheets);
+    expect(preview.errors).toEqual([]);
+    applyCatalogImport(db, repos, preview.plan);
+    const p = repos.products
+      .list({ categoryId: catId })
+      .find((x) => repos.translations.get("product", x.id, "es")?.name === "Tarta");
+    expect(p).toBeTruthy();
+    expect(p!.ingredients_es).toBe("harina, huevo");
+    expect(p!.ingredients_en).toBe("flour, egg");
+    expect(JSON.parse(p!.allergens!)).toEqual(["gluten", "huevo"]);
   });
 
   test("API export + preview + apply con backup", async () => {

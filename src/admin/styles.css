@@ -650,6 +650,68 @@ tbody.is-sorting tr:not(.is-dragging) td {
   }
 }
 
+.product-edit__extras {
+  grid-column: 1 / -1;
+}
+
+.fold {
+  border: 1px solid var(--outline);
+  border-radius: 12px;
+  background: var(--surface-card);
+  padding: 0.15rem 0.85rem 0.85rem;
+}
+
+.fold > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  padding: 0.7rem 0 0.35rem;
+  color: var(--on-surface);
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.allergen-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.allergen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  background: var(--surface-high);
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.allergen-chip.is-on {
+  border-color: var(--on-surface);
+  background: color-mix(in srgb, var(--on-surface) 10%, var(--surface-high));
+  font-weight: 650;
+}
+
+.allergen-chip input {
+  margin: 0;
+}
+
 .type-picks {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

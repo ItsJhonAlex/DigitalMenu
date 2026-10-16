@@ -413,6 +413,10 @@ function paintChrome(): void {
     if (menu.restaurant.footer) {
       footer.appendChild(document.createTextNode(` — ${menu.restaurant.footer}`));
     }
+    const consult = menu.ui.allergensConsult;
+    if (consult) {
+      footer.appendChild(el("p", { className: "footer__allergens", text: consult }));
+    }
   }
   document.title = `${menu.restaurant.name} — Carta`;
 }

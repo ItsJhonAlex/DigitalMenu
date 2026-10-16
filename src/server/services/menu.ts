@@ -1,5 +1,11 @@
 import enUi from "../../carta/i18n/en.json";
 import esUi from "../../carta/i18n/es.json";
+import {
+  ALLERGEN_CODES,
+  ALLERGEN_LABELS,
+  allergenUiKey,
+  parseAllergensJson,
+} from "../../shared/allergens";
 import type {
   CurrencyDto,
   MenuCategory,
@@ -115,6 +121,11 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
     };
 
     const uiBase = { ...(UI_DEFAULTS.es ?? {}), ...(UI_DEFAULTS[lang] ?? {}) };
+    // Etiquetas de alérgeno solo embebidas en ES/EN; otros idiomas caen a ES hasta tener ui_strings.
+    const allergenLang = lang === "en" ? "en" : "es";
+    for (const code of ALLERGEN_CODES) {
+      uiBase[allergenUiKey(code)] = ALLERGEN_LABELS[code][allergenLang];
+    }
     for (const row of repos().uiStrings.listByLang(lang)) {
       uiBase[row.key] = row.value;
     }
@@ -141,11 +152,17 @@ export function createMenuService(opts: { getRepos: () => Repos }) {
         .sort((a, b) => Number(b.available === 1) - Number(a.available === 1))
         .map((p) => {
           const t = pickText("product", p.id, lang);
+          const ingredients =
+            (lang === "en" ? p.ingredients_en : p.ingredients_es)?.trim() ||
+            p.ingredients_es?.trim() ||
+            null;
           return {
             id: p.id,
             type: p.type as ProductType,
             name: t.name,
             description: t.description,
+            ingredients,
+            allergens: parseAllergensJson(p.allergens),
             priceMinor: p.price_minor,
             available: p.available === 1,
             image: imageOf(p.image),

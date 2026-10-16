@@ -41,6 +41,10 @@ export type MenuProduct = {
   type: ProductType;
   name: string;
   description: string | null;
+  /** Ingredientes en el idioma de la carta (fallback a ES). */
+  ingredients: string | null;
+  /** Códigos UE de alérgenos; etiquetas en `menu.ui["allergen.<code>"]`. */
+  allergens: string[];
   priceMinor: number;
   available: boolean;
   image: MenuImage;

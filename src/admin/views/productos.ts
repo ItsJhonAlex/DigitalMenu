@@ -1,3 +1,4 @@
+import { ALLERGEN_CODES, ALLERGEN_LABELS, type AllergenCode } from "../../shared/allergens";
 import type { Currency as MoneyCurrency } from "../../shared/money";
 import { formatPrice } from "../../shared/money";
 import { type Category, type Currency, type I18nMap, type Product, api } from "../api";
@@ -636,6 +637,77 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
   }) as HTMLInputElement;
   visible.checked = product.visible !== false;
 
+  const ingredientsEs = el("textarea", {
+    className: "input",
+    attrs: {
+      maxlength: "2000",
+      rows: "2",
+      placeholder: "Ej. tomate, mozzarella, albahaca",
+    },
+  }) as HTMLTextAreaElement;
+  ingredientsEs.value = product.ingredientsEs ?? "";
+  const ingredientsEn = el("textarea", {
+    className: "input",
+    attrs: {
+      maxlength: "2000",
+      rows: "2",
+      placeholder: "E.g. tomato, mozzarella, basil",
+    },
+  }) as HTMLTextAreaElement;
+  ingredientsEn.value = product.ingredientsEn ?? "";
+
+  const selectedAllergens = new Set<AllergenCode>(
+    (product.allergens ?? []).filter((c): c is AllergenCode =>
+      (ALLERGEN_CODES as readonly string[]).includes(c),
+    ),
+  );
+  const allergenChips = el("div", { className: "allergen-chips" });
+  const allergenInputs: HTMLInputElement[] = [];
+  for (const code of ALLERGEN_CODES) {
+    const input = el("input", {
+      attrs: { type: "checkbox", value: code },
+    }) as HTMLInputElement;
+    input.checked = selectedAllergens.has(code);
+    const chip = el("label", {
+      className: `allergen-chip${input.checked ? " is-on" : ""}`,
+      children: [input, document.createTextNode(ALLERGEN_LABELS[code].es)],
+    });
+    input.addEventListener("change", () => {
+      chip.classList.toggle("is-on", input.checked);
+      markDirty();
+    });
+    allergenInputs.push(input);
+    allergenChips.appendChild(chip);
+  }
+
+  const extrasFold = el("details", {
+    className: "fold product-edit__extras",
+    children: [
+      el("summary", { text: "Ingredientes y alérgenos (opcional)" }),
+      el("div", {
+        className: "stack",
+        children: [
+          el("p", {
+            className: "muted",
+            text: "Para botellas o tragos puede dejarlo vacío. Separar ingredientes con comas.",
+          }),
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Ingredientes (ES)" }), ingredientsEs],
+          }),
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Ingredients (EN)" }), ingredientsEn],
+          }),
+          el("div", {
+            className: "field",
+            children: [el("span", { text: "Alérgenos (UE)" }), allergenChips],
+          }),
+        ],
+      }),
+    ],
+  });
+
   const preview = el("div", { className: "photo-preview" });
   const photoNote = el("p", { className: "muted", text: "" });
   const paintPreview = () => {
@@ -719,6 +791,7 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
       if (nameEn.value.trim()) {
         i18n.en = { name: nameEn.value.trim(), description: descEn.value.trim() || null };
       }
+      const allergens = allergenInputs.filter((i) => i.checked).map((i) => i.value);
       await api.put(`/api/admin/products/${product.id}`, {
         categoryId: Number(cat.value),
         type: selectedType,
@@ -726,6 +799,9 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
         available: available.checked,
         visible: visible.checked,
         image: imageHash,
+        ingredientsEs: ingredientsEs.value.trim() || null,
+        ingredientsEn: ingredientsEn.value.trim() || null,
+        allergens,
         i18n,
       });
       clearDirty();
@@ -842,7 +918,10 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
             save,
           ],
         }),
-        el("div", { className: "product-edit", children: [left, right] }),
+        el("div", {
+          className: "product-edit",
+          children: [left, right, extrasFold],
+        }),
       ],
     }),
   );
@@ -853,7 +932,18 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
   const touchDirty = () => markDirty();
   queueMicrotask(() => {
     clearDirty();
-    for (const node of [nameEs, descEs, nameEn, descEn, price, cat, available, visible]) {
+    for (const node of [
+      nameEs,
+      descEs,
+      nameEn,
+      descEn,
+      price,
+      cat,
+      available,
+      visible,
+      ingredientsEs,
+      ingredientsEn,
+    ]) {
       node.addEventListener("input", touchDirty);
       node.addEventListener("change", touchDirty);
     }

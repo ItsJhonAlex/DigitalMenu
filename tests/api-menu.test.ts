@@ -557,4 +557,84 @@ describe("API /api/menu", () => {
     expect(stillInA).toBeFalsy();
     expect(nowInB).toBe(true);
   });
+
+  test("sin ingredientes/alérgenos la carta no los incluye; con datos sí", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.list()[0]!.id;
+    const plain = repos.products.create({
+      category_id: catId,
+      type: "bebida",
+      price_minor: 800,
+      visible: true,
+      available: true,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: plain,
+      lang: "es",
+      name: "Agua",
+      description: null,
+    });
+    const rich = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 2200,
+      visible: true,
+      available: true,
+      ingredients_es: "trigo, leche",
+      ingredients_en: "wheat, milk",
+      allergens: JSON.stringify(["gluten", "lacteos"]),
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: rich,
+      lang: "es",
+      name: "Pan",
+      description: "Casero",
+    });
+    repos.settings.bumpMenuRevision();
+
+    const es = await app.request("http://localhost:8080/api/menu?lang=es", { headers: host });
+    const bodyEs = (await es.json()) as MenuResponse;
+    expect(bodyEs.ui.allergensConsult).toContain("alérgenos");
+    expect(bodyEs.ui["allergen.gluten"]).toBe("Gluten");
+    const agua = bodyEs.categories.flatMap((c) => c.products).find((p) => p.id === plain);
+    const pan = bodyEs.categories.flatMap((c) => c.products).find((p) => p.id === rich);
+    expect(agua?.ingredients).toBeNull();
+    expect(agua?.allergens).toEqual([]);
+    expect(pan?.ingredients).toBe("trigo, leche");
+    expect(pan?.allergens).toEqual(["gluten", "lacteos"]);
+
+    const en = await app.request("http://localhost:8080/api/menu?lang=en", { headers: host });
+    const bodyEn = (await en.json()) as MenuResponse;
+    expect(bodyEn.ui.allergensConsult).toContain("allergens");
+    const panEn = bodyEn.categories.flatMap((c) => c.products).find((p) => p.id === rich);
+    expect(panEn?.ingredients).toBe("wheat, milk");
+    expect(bodyEn.ui["allergen.lacteos"]).toBe("Milk");
+  });
+
+  test("ingredientes EN vacío hace fallback a ES", async () => {
+    const { app, repos } = setup();
+    const catId = repos.categories.list()[0]!.id;
+    const id = repos.products.create({
+      category_id: catId,
+      type: "comida",
+      price_minor: 1000,
+      visible: true,
+      ingredients_es: "solo español",
+      ingredients_en: null,
+    });
+    repos.translations.upsert({
+      entity: "product",
+      entity_id: id,
+      lang: "es",
+      name: "Plato",
+      description: null,
+    });
+    repos.settings.bumpMenuRevision();
+    const res = await app.request("http://localhost:8080/api/menu?lang=en", { headers: host });
+    const body = (await res.json()) as MenuResponse;
+    const p = body.categories.flatMap((c) => c.products).find((x) => x.id === id);
+    expect(p?.ingredients).toBe("solo español");
+  });
 });

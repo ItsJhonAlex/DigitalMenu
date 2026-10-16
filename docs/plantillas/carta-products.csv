@@ -1,0 +1,2 @@
+id,category_id,type,price_minor,available,visible,sort_order,image,name_es,description_es,name_en,description_en,ingredientes_es,ingredientes_en,alergenos
+,1,comida,1200,1,1,0,,Ejemplo pizza,Masa fina,Example pizza,Thin crust,"tomate, mozzarella, albahaca","tomato, mozzarella, basil","gluten,lacteos"

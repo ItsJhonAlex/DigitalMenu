@@ -53,8 +53,8 @@ describe("migrate", () => {
     const dataDir = tempDataDir();
     const db = openTempDb(dataDir);
     const result = migrate(db, { dataDir });
-    expect(result.applied).toEqual([1, 2]);
-    expect(appliedVersions(db)).toEqual([1, 2]);
+    expect(result.applied).toEqual([1, 2, 3]);
+    expect(appliedVersions(db)).toEqual([1, 2, 3]);
 
     const repos = createRepos(db);
     expect(repos.languages.list().map((l) => l.code)).toEqual(["es", "en"]);
@@ -81,8 +81,20 @@ describe("migrate", () => {
     const db2 = openTempDb(dataDir);
     const second = migrate(db2, { dataDir });
     expect(second.applied).toEqual([]);
-    expect(second.already).toEqual([1, 2]);
+    expect(second.already).toEqual([1, 2, 3]);
     expect(createRepos(db2).categories.list()).toHaveLength(6);
+  });
+
+  test("003 añade columnas de ingredientes y alérgenos", () => {
+    const dataDir = tempDataDir();
+    const db = openTempDb(dataDir);
+    migrate(db, { dataDir });
+    const cols = (db.prepare(`PRAGMA table_info(products)`).all() as Array<{ name: string }>).map(
+      (c) => c.name,
+    );
+    expect(cols).toContain("ingredients_es");
+    expect(cols).toContain("ingredients_en");
+    expect(cols).toContain("allergens");
   });
 
   test("protege idioma es y moneda base", () => {

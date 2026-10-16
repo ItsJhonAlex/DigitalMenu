@@ -898,6 +898,40 @@ body {
   opacity: 0.92;
 }
 
+.product-ingredients {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--ink, #33302d) 62%, transparent);
+}
+
+.product-allergens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.allergen-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink, #33302d) 18%, transparent);
+  color: color-mix(in srgb, var(--ink, #33302d) 78%, transparent);
+  background: color-mix(in srgb, var(--paper, #fff8f5) 88%, #33302d);
+}
+
+.foot .footer__allergens {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  opacity: 0.78;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .detail-backdrop,
   .detail {

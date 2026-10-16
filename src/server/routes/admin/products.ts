@@ -8,6 +8,8 @@ import {
   parseI18n,
   parseIdParam,
   parseImageHash,
+  parseOptionalAllergens,
+  parseOptionalIngredients,
   requireInt,
   requireObject,
   requireString,
@@ -102,6 +104,9 @@ export function productsAdmin(ctx: AppContext) {
     const available = optionalBool(body.available, "available") ?? true;
     const visible = optionalBool(body.visible, "visible") ?? true;
     const i18n = parseI18n(body.i18n, repos);
+    const ingredientsEs = parseOptionalIngredients(body.ingredientsEs, "ingredientsEs") ?? null;
+    const ingredientsEn = parseOptionalIngredients(body.ingredientsEn, "ingredientsEn") ?? null;
+    const allergens = parseOptionalAllergens(body.allergens) ?? null;
 
     const id = repos.products.create({
       category_id: categoryId,
@@ -110,6 +115,9 @@ export function productsAdmin(ctx: AppContext) {
       image,
       available,
       visible,
+      ingredients_es: ingredientsEs,
+      ingredients_en: ingredientsEn,
+      allergens,
     });
     saveI18n(repos, "product", id, i18n);
     const row = repos.products.get(id)!;
@@ -138,6 +146,14 @@ export function productsAdmin(ctx: AppContext) {
     const visible = optionalBool(body.visible, "visible") ?? existing.visible === 1;
     const i18n =
       body.i18n !== undefined ? parseI18n(body.i18n, repos) : loadI18n(repos, "product", id);
+    const ingredientsEsParsed = parseOptionalIngredients(body.ingredientsEs, "ingredientsEs");
+    const ingredientsEnParsed = parseOptionalIngredients(body.ingredientsEn, "ingredientsEn");
+    const allergensParsed = parseOptionalAllergens(body.allergens);
+    const ingredientsEs =
+      ingredientsEsParsed !== undefined ? ingredientsEsParsed : existing.ingredients_es;
+    const ingredientsEn =
+      ingredientsEnParsed !== undefined ? ingredientsEnParsed : existing.ingredients_en;
+    const allergens = allergensParsed !== undefined ? allergensParsed : existing.allergens;
 
     repos.products.update(id, {
       category_id: categoryId,
@@ -147,6 +163,9 @@ export function productsAdmin(ctx: AppContext) {
       available,
       visible,
       sort_order: existing.sort_order,
+      ingredients_es: ingredientsEs,
+      ingredients_en: ingredientsEn,
+      allergens,
     });
     saveI18n(repos, "product", id, i18n);
     const row = repos.products.get(id)!;

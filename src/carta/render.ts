@@ -1,3 +1,4 @@
+import { type AllergenCode, allergenUiKey, isAllergenCode } from "../shared/allergens";
 import type { MenuCategory, MenuOffer, MenuProduct, MenuResponse } from "../shared/api-types";
 import type { Currency } from "../shared/money";
 import { formatPrice } from "../shared/money";
@@ -134,6 +135,46 @@ function renderTextLine(opts: {
   return line;
 }
 
+function allergenLabel(menu: MenuResponse, code: string): string {
+  if (isAllergenCode(code)) {
+    return menu.ui[allergenUiKey(code as AllergenCode)] ?? code;
+  }
+  return code;
+}
+
+/** Ingredientes (texto pequeño) + chips de alérgenos; solo si hay datos. */
+function appendIngredientsAllergens(parent: HTMLElement, p: MenuProduct, menu: MenuResponse): void {
+  if (p.ingredients) {
+    const label = menu.ui.ingredients ?? "Ingredientes";
+    parent.appendChild(
+      el("p", {
+        className: "product-ingredients",
+        text: `${label}: ${p.ingredients}`,
+      }),
+    );
+  }
+  if (p.allergens.length > 0) {
+    const row = el("div", {
+      className: "product-allergens",
+      attrs: {
+        role: "list",
+        "aria-label": menu.ui.allergens ?? "Alérgenos",
+      },
+    });
+    for (const code of p.allergens) {
+      const name = allergenLabel(menu, code);
+      row.appendChild(
+        el("span", {
+          className: "allergen-badge",
+          text: name,
+          attrs: { role: "listitem", title: name },
+        }),
+      );
+    }
+    parent.appendChild(row);
+  }
+}
+
 /** full = platos; drink = bebidas/cócteles (foto horizontal amplia); compact = artículos */
 export type PhotoLayout = "full" | "drink" | "compact";
 
@@ -162,6 +203,7 @@ function renderPhotoCard(
     const body = el("div", { className: "row-card__body" });
     body.appendChild(el("h3", { text: p.name }));
     if (p.description) body.appendChild(el("p", { text: p.description }));
+    appendIngredientsAllergens(body, p, menu);
     body.appendChild(
       priceBlock(
         prices,
@@ -193,6 +235,7 @@ function renderPhotoCard(
     const body = el("div", { className: "drink-card__body" });
     body.appendChild(el("h3", { text: p.name }));
     if (p.description) body.appendChild(el("p", { text: p.description }));
+    appendIngredientsAllergens(body, p, menu);
     if (!p.available && !img) {
       body.appendChild(el("span", { className: "badge badge--sold", text: soldOut }));
     }
@@ -219,6 +262,7 @@ function renderPhotoCard(
   const body = el("div", { className: "card__body" });
   body.appendChild(el("h3", { text: p.name }));
   if (p.description) body.appendChild(el("p", { text: p.description }));
+  appendIngredientsAllergens(body, p, menu);
   if (!p.available && !img) {
     body.appendChild(el("span", { className: "badge badge--sold", text: soldOut }));
   }
@@ -261,6 +305,7 @@ export function renderProductCard(
       available: p.available,
       soldOut,
     });
+    appendIngredientsAllergens(line, p, menu);
     bindOpen(line, p, onOpen);
     return line;
   }
@@ -308,6 +353,7 @@ export function renderProductDetail(
   const body = el("div", { className: "detail__body" });
   body.appendChild(el("h2", { text: p.name }));
   if (p.description) body.appendChild(el("p", { text: p.description }));
+  appendIngredientsAllergens(body, p, menu);
   if (!p.available) {
     body.appendChild(
       el("span", { className: "badge badge--sold", text: menu.ui.soldOut ?? "Agotado" }),
