@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { type WifiSecurity, wifiPayload } from "../../../shared/wifi";
 import type { AppContext } from "../../app";
 import { conflict } from "../../http/errors";
@@ -5,6 +7,35 @@ import { requireObject, requireString, validationError } from "../../http/valida
 import { evaluateIpChange, isPrivateLanIpv4, listLanCandidates } from "../../services/network";
 import { makeQrSvg } from "../../services/qr";
 import { createAdminRouter } from "./base";
+
+const HASH_RE = /^[a-f0-9]{16}$/;
+
+function logoDataUrl(dataDir: string, hash: string | null): string | null {
+  if (!hash || !HASH_RE.test(hash)) return null;
+  const path = join(dataDir, "images", `${hash}.webp`);
+  if (!existsSync(path)) return null;
+  const buf = readFileSync(path);
+  return `data:image/webp;base64,${Buffer.from(buf).toString("base64")}`;
+}
+
+function qrRenderOpts(
+  repos: AppContext["repos"],
+  dataDir: string,
+  query?: { fg?: string | undefined; logo?: string | undefined },
+) {
+  const savedFg = repos.settings.getJson<string>("qr.fg", "#1e1b19");
+  const fg =
+    query?.fg && /^#[0-9a-fA-F]{6}$/.test(query.fg) ? query.fg.toLowerCase() : savedFg;
+  const showLogo =
+    query?.logo === "1" || query?.logo === "0"
+      ? query.logo === "1"
+      : repos.settings.getJson<boolean>("qr.show_logo", false);
+  const logoHash = showLogo ? repos.settings.getJson<string | null>("carta.logo", null) : null;
+  return {
+    fg: typeof fg === "string" ? fg : "#1e1b19",
+    logoDataUrl: showLogo ? logoDataUrl(dataDir, logoHash) : null,
+  };
+}
 
 export function networkAdmin(ctx: AppContext) {
   const app = createAdminRouter(ctx);
@@ -104,8 +135,18 @@ export function networkAdmin(ctx: AppContext) {
     const password = repos.settings.getJson<string>("wifi.password", "");
     const hidden = repos.settings.getJson<boolean>("wifi.hidden", false);
     const size = Number(c.req.query("size") ?? 300);
-    const svg = makeQrSvg(wifiPayload({ ssid, password, security, hidden }), size);
-    return c.body(svg, 200, { "Content-Type": "image/svg+xml; charset=utf-8" });
+    const svg = makeQrSvg(
+      wifiPayload({ ssid, password, security, hidden }),
+      size,
+      qrRenderOpts(repos, runtime.dataDir, {
+        fg: c.req.query("fg") ?? undefined,
+        logo: c.req.query("logo") ?? undefined,
+      }),
+    );
+    return c.body(svg, 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
   });
 
   app.get("/api/admin/qr/carta.svg", (c) => {
@@ -116,8 +157,18 @@ export function networkAdmin(ctx: AppContext) {
     if (!ip) throw conflict("No hay IP de carta configurada");
     const url = `http://${ip}:${runtime.config.port}/`;
     const size = Number(c.req.query("size") ?? 300);
-    const svg = makeQrSvg(url, size);
-    return c.body(svg, 200, { "Content-Type": "image/svg+xml; charset=utf-8" });
+    const svg = makeQrSvg(
+      url,
+      size,
+      qrRenderOpts(repos, runtime.dataDir, {
+        fg: c.req.query("fg") ?? undefined,
+        logo: c.req.query("logo") ?? undefined,
+      }),
+    );
+    return c.body(svg, 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
   });
 
   return app;

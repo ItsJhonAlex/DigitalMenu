@@ -3,6 +3,38 @@ import { clear, el } from "../dom";
 import { openConfirm, openModal } from "../modal";
 import { showToast } from "../toast";
 
+type LangStatus = {
+  lang: string;
+  total: number;
+  translated: number;
+  missing?: { category: number; product: number; offer: number };
+};
+
+function section(title: string, hint: string | null, children: HTMLElement[]): HTMLElement {
+  const headKids: HTMLElement[] = [el("h2", { className: "card__title", text: title })];
+  if (hint) headKids.push(el("p", { className: "muted tiny", text: hint }));
+  return el("section", {
+    className: "card stack idiomas-section",
+    children: [el("div", { className: "idiomas-section__head", children: headKids }), ...children],
+  });
+}
+
+function progressBar(translated: number, total: number): HTMLElement {
+  const pct = total > 0 ? Math.round((translated / total) * 100) : 100;
+  const fill = el("div", {
+    className: `idiomas-progress__fill${pct >= 100 ? " is-done" : pct < 50 ? " is-low" : ""}`,
+  });
+  fill.style.width = `${pct}%`;
+  return el("div", {
+    className: "idiomas-progress",
+    attrs: { role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
+    children: [
+      el("div", { className: "idiomas-progress__track", children: [fill] }),
+      el("span", { className: "idiomas-progress__label", text: `${translated}/${total} · ${pct}%` }),
+    ],
+  });
+}
+
 export async function renderIdiomas(root: HTMLElement): Promise<void> {
   const refresh = async () => {
     clear(root);
@@ -14,17 +46,11 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
   async function build(): Promise<HTMLElement> {
     const [langs, status] = await Promise.all([
       api.get<{ items: Language[] }>("/api/admin/languages"),
-      api.get<{
-        items: Array<{
-          lang: string;
-          total: number;
-          translated: number;
-          missing?: { category: number; product: number; offer: number };
-        }>;
-      }>("/api/admin/translations/status"),
+      api.get<{ items: LangStatus[] }>("/api/admin/translations/status"),
     ]);
 
-    const wrap = el("div", { className: "stack" });
+    const page = el("div", { className: "stack idiomas-page" });
+
     const add = el("button", {
       className: "btn btn--primary",
       text: "Añadir idioma",
@@ -68,59 +94,83 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
       });
     });
 
-    wrap.appendChild(
+    page.appendChild(
       el("div", {
-        className: "row row--between",
-        children: [el("p", { className: "muted", text: "Progreso de traducciones" }), add],
+        className: "row row--between idiomas-toolbar",
+        children: [
+          el("p", {
+            className: "muted tiny",
+            text: "Active idiomas y complete las traducciones de la carta",
+          }),
+          add,
+        ],
       }),
     );
 
-    const table = el("table", { className: "data" });
-    table.appendChild(
-      el("thead", {
+    const activeCount = langs.items.filter((l) => l.active).length;
+    const nonBase = status.items.filter((s) => s.lang !== "es");
+    const incomplete = nonBase.filter((s) => s.total > 0 && s.translated < s.total).length;
+
+    page.appendChild(
+      el("div", {
+        className: "idiomas-kpis",
         children: [
-          el("tr", {
-            children: ["Código", "Nombre", "Activo", "Traducido", "Faltantes", "Acciones"].map(
-              (t) => el("th", { text: t }),
-            ),
+          el("div", {
+            className: "idiomas-kpi",
+            children: [
+              el("span", { className: "idiomas-kpi__label", text: "Idiomas" }),
+              el("div", {
+                className: "idiomas-kpi__value",
+                text: `${langs.items.length}`,
+              }),
+            ],
+          }),
+          el("div", {
+            className: "idiomas-kpi",
+            children: [
+              el("span", { className: "idiomas-kpi__label", text: "Activos" }),
+              el("div", { className: "idiomas-kpi__value", text: String(activeCount) }),
+            ],
+          }),
+          el("div", {
+            className: `idiomas-kpi${incomplete > 0 ? " idiomas-kpi--warn" : ""}`,
+            children: [
+              el("span", { className: "idiomas-kpi__label", text: "Con faltantes" }),
+              el("div", { className: "idiomas-kpi__value", text: String(incomplete) }),
+            ],
           }),
         ],
       }),
     );
-    const tbody = el("tbody");
+
+    const list = el("div", { className: "stack idiomas-list" });
     for (const lang of langs.items) {
       const st = status.items.find((s) => s.lang === lang.code);
+      const isBase = lang.code === "es";
+      const missing = st?.missing;
+
       const toggle = el("input", {
         className: "toggle",
         attrs: { type: "checkbox", ...(lang.active ? { checked: "" } : {}) },
       }) as HTMLInputElement;
-      if (lang.code === "es") toggle.disabled = true;
+      if (isBase) toggle.disabled = true;
       toggle.addEventListener("change", async () => {
         try {
           await api.patch(`/api/admin/languages/${lang.code}`, { active: toggle.checked });
           showToast("Guardado", "success");
+          await refresh();
         } catch (err) {
           toggle.checked = !toggle.checked;
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
 
-      const missing = st?.missing;
-      const missingText =
-        lang.code === "es"
-          ? "—"
-          : missing
-            ? `Cat ${missing.category} · Prod ${missing.product} · Ofertas ${missing.offer}`
-            : st
-              ? `${Math.max(0, st.total - st.translated)}`
-              : "—";
-
       const viewMissing = el("button", {
         className: "btn btn--ghost btn--sm",
         text: "Ver faltantes",
         attrs: {
           type: "button",
-          ...(lang.code === "es" || !missing || missing.product === 0 ? { disabled: "" } : {}),
+          ...(isBase || !missing || missing.product === 0 ? { disabled: "" } : {}),
         },
       });
       viewMissing.addEventListener("click", () => {
@@ -130,7 +180,7 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
       const del = el("button", {
         className: "btn btn--danger btn--sm",
         text: "Eliminar",
-        attrs: { type: "button", ...(lang.code === "es" ? { disabled: "" } : {}) },
+        attrs: { type: "button", ...(isBase ? { disabled: "" } : {}) },
       });
       del.addEventListener("click", async () => {
         const ok = await openConfirm({
@@ -148,31 +198,76 @@ export async function renderIdiomas(root: HTMLElement): Promise<void> {
           showToast(err instanceof Error ? err.message : "Error", "error");
         }
       });
-      tbody.appendChild(
-        el("tr", {
-          children: [
-            el("td", { text: lang.code }),
-            el("td", { text: lang.nativeName }),
-            el("td", { children: [toggle] }),
-            el("td", {
-              text: st ? `${st.translated}/${st.total}` : "—",
+
+      const meta: HTMLElement[] = [];
+      if (isBase) {
+        meta.push(el("span", { className: "chip chip--ok", text: "Base" }));
+      }
+      if (!lang.active) {
+        meta.push(el("span", { className: "chip chip--off", text: "Inactivo" }));
+      }
+      if (missing && !isBase) {
+        const totalMissing = missing.category + missing.product + missing.offer;
+        if (totalMissing > 0) {
+          meta.push(
+            el("span", {
+              className: "chip chip--warn",
+              text: `Cat ${missing.category} · Prod ${missing.product} · Ofertas ${missing.offer}`,
             }),
-            el("td", { text: missingText }),
-            el("td", {
-              children: [el("div", { className: "row", children: [viewMissing, del] })],
+          );
+        } else {
+          meta.push(el("span", { className: "chip chip--ok", text: "Completo" }));
+        }
+      }
+
+      list.appendChild(
+        el("article", {
+          className: `idiomas-card${lang.active ? "" : " is-off"}`,
+          children: [
+            el("div", {
+              className: "row row--between idiomas-card__top",
+              children: [
+                el("div", {
+                  className: "idiomas-card__identity",
+                  children: [
+                    el("strong", { className: "idiomas-card__code", text: lang.code }),
+                    el("span", { className: "idiomas-card__name", text: lang.nativeName }),
+                    ...(meta.length
+                      ? [el("div", { className: "row idiomas-card__meta", children: meta })]
+                      : []),
+                  ],
+                }),
+                el("label", {
+                  className: "row idiomas-card__active",
+                  children: [toggle, el("span", { text: "Activo" })],
+                }),
+              ],
+            }),
+            isBase
+              ? el("p", {
+                  className: "muted tiny",
+                  text: "Idioma base de la carta. No se puede desactivar ni eliminar.",
+                })
+              : st
+                ? progressBar(st.translated, st.total)
+                : el("p", { className: "muted tiny", text: "Sin datos de progreso" }),
+            el("div", {
+              className: "row idiomas-card__actions",
+              children: [viewMissing, del],
             }),
           ],
         }),
       );
     }
-    table.appendChild(tbody);
-    wrap.appendChild(el("div", { className: "table-wrap", children: [table] }));
-    wrap.appendChild(
-      el("p", {
-        className: "muted tiny",
-        text: "«Ver faltantes» abre Productos filtrados por ese idioma. Complete también categorías y ofertas desde sus fichas.",
-      }),
+
+    page.appendChild(
+      section(
+        "Idiomas de la carta",
+        "«Ver faltantes» abre Productos filtrados por ese idioma. Complete también categorías y ofertas desde sus fichas.",
+        [list],
+      ),
     );
-    return wrap;
+
+    return page;
   }
 }

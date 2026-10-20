@@ -1,6 +1,5 @@
 import { type Category, api } from "../api";
 import { i18nTabs } from "../components/i18n-tabs";
-import { pageToolbar } from "../components/page-toolbar";
 import { clear, el, nameOf } from "../dom";
 import { openConfirm, openModal } from "../modal";
 import { enablePointerSort, nudgeRow, sortableControls } from "../sortable";
@@ -20,22 +19,94 @@ export async function renderCategorias(root: HTMLElement): Promise<void> {
 }
 
 async function build(items: Category[], refresh: () => Promise<void>): Promise<HTMLElement> {
-  const wrap = el("div", { className: "stack" });
+  const page = el("div", { className: "stack categorias-page" });
   const newBtn = el("button", {
     className: "btn btn--primary",
     text: "Nueva categoría",
     attrs: { type: "button" },
   });
   newBtn.addEventListener("click", () => void openCategoryModal(null, refresh));
-  wrap.appendChild(
-    pageToolbar({
-      summary: `${items.length} categorías`,
-      actions: [newBtn],
+
+  page.appendChild(
+    el("div", {
+      className: "row row--between categorias-toolbar",
+      children: [
+        el("p", {
+          className: "muted tiny",
+          text: "Orden y visibilidad de secciones en la carta",
+        }),
+        newBtn,
+      ],
+    }),
+  );
+
+  const kpiTotal = el("div", { className: "categorias-kpi__value", text: "0" });
+  const kpiVisible = el("div", { className: "categorias-kpi__value", text: "0" });
+  const kpiHidden = el("div", { className: "categorias-kpi__value", text: "0" });
+  const kpiIncomplete = el("div", { className: "categorias-kpi__value", text: "0" });
+  const kpiEmpty = el("div", { className: "categorias-kpi__value", text: "0" });
+  const kpiHiddenCard = el("div", {
+    className: "categorias-kpi",
+    children: [el("span", { className: "categorias-kpi__label", text: "Ocultas" }), kpiHidden],
+  });
+  const kpiIncompleteCard = el("div", {
+    className: "categorias-kpi",
+    attrs: { title: "Sin descripción (ES) o falta nombre en inglés" },
+    children: [
+      el("span", { className: "categorias-kpi__label", text: "Incompletas" }),
+      kpiIncomplete,
+    ],
+  });
+  const kpiEmptyCard = el("div", {
+    className: "categorias-kpi",
+    children: [el("span", { className: "categorias-kpi__label", text: "Vacías" }), kpiEmpty],
+  });
+
+  const isIncomplete = (c: Category) => {
+    const missingDesc = !(c.i18n.es?.description?.trim());
+    const missingEn = !(c.i18n.en?.name?.trim());
+    return missingDesc || missingEn;
+  };
+
+  const paintKpis = (list: Category[]) => {
+    const hiddenN = list.filter((c) => !c.visible).length;
+    const incompleteN = list.filter(isIncomplete).length;
+    const emptyN = list.filter((c) => c.productCount === 0).length;
+    kpiTotal.textContent = String(list.length);
+    kpiVisible.textContent = String(list.filter((c) => c.visible).length);
+    kpiHidden.textContent = String(hiddenN);
+    kpiIncomplete.textContent = String(incompleteN);
+    kpiEmpty.textContent = String(emptyN);
+    kpiHiddenCard.classList.toggle("categorias-kpi--warn", hiddenN > 0);
+    kpiIncompleteCard.classList.toggle("categorias-kpi--warn", incompleteN > 0);
+    kpiEmptyCard.classList.toggle("categorias-kpi--warn", emptyN > 0);
+  };
+  paintKpis(items);
+
+  page.appendChild(
+    el("div", {
+      className: "categorias-kpis",
+      children: [
+        el("div", {
+          className: "categorias-kpi",
+          children: [el("span", { className: "categorias-kpi__label", text: "Total" }), kpiTotal],
+        }),
+        el("div", {
+          className: "categorias-kpi",
+          children: [
+            el("span", { className: "categorias-kpi__label", text: "Visibles" }),
+            kpiVisible,
+          ],
+        }),
+        kpiHiddenCard,
+        kpiIncompleteCard,
+        kpiEmptyCard,
+      ],
     }),
   );
 
   if (items.length === 0) {
-    wrap.appendChild(
+    page.appendChild(
       el("div", {
         className: "card stack empty-state",
         children: [
@@ -48,17 +119,15 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
         ],
       }),
     );
-    const firstBtn = wrap.querySelector(".empty-state button") as HTMLButtonElement;
+    const firstBtn = page.querySelector(".empty-state button") as HTMLButtonElement;
     firstBtn.addEventListener("click", () => void openCategoryModal(null, refresh));
-    return wrap;
+    return page;
   }
 
-  wrap.appendChild(
-    el("p", {
-      className: "muted tiny",
-      text: "Arrastre ⠿ con el dedo o use ↑/↓ para ordenar. El orden se guarda al soltar.",
-    }),
-  );
+  const hint = el("p", {
+    className: "muted tiny categorias-hint",
+    text: "Arrastre ⠿ con el dedo o use ↑/↓ para ordenar. El orden se guarda al soltar.",
+  });
 
   const table = el("table", { className: "data" });
   table.appendChild(
@@ -92,6 +161,8 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
     visible.addEventListener("change", async () => {
       try {
         await api.patch(`/api/admin/categories/${cat.id}`, { visible: visible.checked });
+        cat.visible = visible.checked;
+        paintKpis(items);
         showToast("Guardado", "success");
       } catch (err) {
         visible.checked = !visible.checked;
@@ -153,8 +224,28 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
   }
   table.appendChild(tbody);
   enablePointerSort(tbody, { onReorder: saveOrder });
-  wrap.appendChild(el("div", { className: "table-wrap", children: [table] }));
-  return wrap;
+
+  page.appendChild(
+    el("section", {
+      className: "card stack categorias-section",
+      children: [
+        el("div", {
+          className: "categorias-section__head",
+          children: [
+            el("h2", { className: "card__title", text: "Listado" }),
+            el("p", {
+              className: "muted tiny",
+              text: "Reordene, edite o oculte categorías de la carta.",
+            }),
+          ],
+        }),
+        hint,
+        el("div", { className: "table-wrap", children: [table] }),
+      ],
+    }),
+  );
+
+  return page;
 }
 
 async function openCategoryModal(

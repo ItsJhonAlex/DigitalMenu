@@ -33,6 +33,8 @@ export type DiagnosticsDto = {
 
 const REFRESH_MS = 5_000;
 
+const TAB_LABELS = ["General", "Carta", "Diagnóstico", "Copias"] as const;
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -48,64 +50,150 @@ function formatUptime(sec: number): string {
   return `${s} s`;
 }
 
-function metric(label: string, value: string, opts?: { warn?: boolean }): HTMLElement {
+async function copyText(text: string, okMsg: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(okMsg, "success");
+  } catch {
+    showToast("No se pudo copiar", "error");
+  }
+}
+
+function kpi(label: string, valueNode: Node, opts?: { warn?: boolean }): HTMLElement {
   return el("div", {
-    className: `estado-metric${opts?.warn ? " estado-metric--warn" : ""}`,
+    className: `estado-kpi${opts?.warn ? " estado-kpi--warn" : ""}`,
     children: [
-      el("span", { className: "estado-metric__label", text: label }),
-      el("span", { className: "estado-metric__value", text: value }),
+      el("span", { className: "estado-kpi__label", text: label }),
+      el("div", { className: "estado-kpi__value", children: [valueNode] }),
     ],
+  });
+}
+
+function dlRow(label: string, value: Node | string): HTMLElement {
+  const valueEl =
+    typeof value === "string"
+      ? el("span", { className: "estado-dl__value", text: value })
+      : el("div", { className: "estado-dl__value", children: [value] });
+  return el("div", {
+    className: "estado-dl__row",
+    children: [el("span", { className: "estado-dl__label", text: label }), valueEl],
+  });
+}
+
+function section(title: string, hint: string | null, children: HTMLElement[]): HTMLElement {
+  const headKids: HTMLElement[] = [el("h2", { className: "card__title", text: title })];
+  if (hint) headKids.push(el("p", { className: "muted tiny", text: hint }));
+  return el("section", {
+    className: "card stack estado-section",
+    children: [el("div", { className: "estado-section__head", children: headKids }), ...children],
   });
 }
 
 export async function renderEstado(root: HTMLElement): Promise<void> {
   clear(root);
-  const wrap = el("div", { className: "stack" });
+  const wrap = el("div", { className: "stack estado-page" });
   root.appendChild(wrap);
 
   const backupWarn = el("div", {
-    className: "banner",
+    className: "banner banner--compact",
     attrs: { hidden: "true" },
   });
   wrap.appendChild(backupWarn);
 
-  const head = el("div", { className: "row row--between" });
-  head.append(
-    el("p", {
-      className: "muted",
-      text: "Se actualiza sola cada 5 s. Los móviles conectados son las cartas abiertas (SSE).",
-    }),
-  );
   const updated = el("span", { className: "muted tiny", text: "…" });
-  head.appendChild(updated);
-  wrap.appendChild(head);
+  const copyDiagBtn = el("button", {
+    className: "btn btn--ghost btn--sm",
+    text: "Copiar diagnóstico",
+    attrs: { type: "button" },
+  });
 
-  const grid = el("div", { className: "estado-grid" });
-  wrap.appendChild(grid);
+  const tabs = el("div", { className: "tabs", attrs: { role: "tablist" } });
+  const panels = el("div", { className: "estado-tab-panels stack" });
 
-  const alertsCard = el("section", { className: "card stack" });
-  alertsCard.appendChild(el("h2", { className: "card__title", text: "Últimos avisos" }));
-  const alertsBody = el("div", { className: "estado-log" });
-  alertsCard.appendChild(alertsBody);
-  wrap.appendChild(alertsCard);
-
-  const logCard = el("section", { className: "card stack" });
-  logCard.append(
+  wrap.append(
     el("div", {
-      className: "row row--between",
+      className: "row row--between estado-toolbar",
       children: [
-        el("h2", { className: "card__title", text: "Log reciente" }),
-        el("button", {
-          className: "btn btn--ghost btn--sm",
-          text: "Copiar diagnóstico",
-          attrs: { type: "button", id: "btn-copy-diag" },
+        tabs,
+        el("div", {
+          className: "row estado-toolbar__meta",
+          children: [updated, copyDiagBtn],
         }),
       ],
     }),
+    panels,
   );
+
+  const panelGeneral = el("div", {
+    className: "stack estado-panel",
+    attrs: { role: "tabpanel" },
+  });
+  const panelCarta = el("div", {
+    className: "stack estado-panel",
+    attrs: { role: "tabpanel", hidden: "true" },
+  });
+  const panelDiag = el("div", {
+    className: "stack estado-panel",
+    attrs: { role: "tabpanel", hidden: "true" },
+  });
+  const panelCopias = el("div", {
+    className: "stack estado-panel",
+    attrs: { role: "tabpanel", hidden: "true" },
+  });
+  panels.append(panelGeneral, panelCarta, panelDiag, panelCopias);
+
+  const tabBtns: HTMLButtonElement[] = [];
+  const showPanel = (i: number) => {
+    for (let j = 0; j < tabBtns.length; j++) {
+      const active = j === i;
+      tabBtns[j]!.classList.toggle("is-active", active);
+      tabBtns[j]!.setAttribute("aria-selected", active ? "true" : "false");
+      (panels.children[j] as HTMLElement).hidden = !active;
+    }
+  };
+  for (const [i, label] of TAB_LABELS.entries()) {
+    const btn = el("button", {
+      className: `tab${i === 0 ? " is-active" : ""}`,
+      text: label,
+      attrs: {
+        type: "button",
+        role: "tab",
+        "aria-selected": i === 0 ? "true" : "false",
+      },
+    }) as HTMLButtonElement;
+    btn.addEventListener("click", () => showPanel(i));
+    tabBtns.push(btn);
+    tabs.appendChild(btn);
+  }
+
+  const kpis = el("div", { className: "estado-kpis" });
+  const storageBody = el("div", { className: "estado-dl" });
+  panelGeneral.append(
+    kpis,
+    section("Almacenamiento y app", "Tamaño de datos, versión y ruta de trabajo.", [storageBody]),
+  );
+
+  const cartaNetBody = el("div", { className: "estado-dl" });
+  panelCarta.append(
+    section("Carta y red", "URL pública, puerto y revisión SSE de la carta.", [cartaNetBody]),
+  );
+
+  const alertsBody = el("div", { className: "estado-alerts" });
   const logBody = el("pre", { className: "estado-log estado-log--raw" });
-  logCard.appendChild(logBody);
-  wrap.appendChild(logCard);
+  const logFold = el("details", {
+    className: "fold estado-log-fold",
+    children: [
+      el("summary", { text: "Log reciente" }),
+      el("div", { className: "estado-log-fold__body", children: [logBody] }),
+    ],
+  });
+  panelDiag.append(
+    section("Avisos", "WARN y ERROR recientes del servidor.", [alertsBody]),
+    section("Registro", "Últimas líneas del log de la aplicación.", [logFold]),
+  );
+
+  const copiasMount = el("div", { className: "stack" });
+  panelCopias.appendChild(copiasMount);
 
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -113,41 +201,68 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
 
   const paint = (d: DiagnosticsDto) => {
     lastDto = d;
-    clear(grid);
     const ipWarn = d.network.ipChanged;
-    const ipText = d.network.ipChanged
-      ? `${d.network.savedIp ?? "?"} → ${d.network.currentIp ?? "?"} (cambió)`
-      : (d.network.savedIp ?? d.network.currentIp ?? "—");
+    const ipLabel = d.network.savedIp ?? d.network.currentIp ?? "—";
+    const ipNode = el("span", {
+      className: `chip ${ipWarn ? "chip--warn" : "chip--ok"}`,
+      text: ipWarn ? `${d.network.savedIp ?? "?"} → ${d.network.currentIp ?? "?"}` : ipLabel,
+    });
 
-    grid.append(
-      metric("Móviles conectados", `${d.menuEvents.clients} / ${d.menuEvents.maxClients}`),
-      metric("Memoria (RSS)", `${d.memory.rssMB} MB`),
-      metric("Tiempo encendida", formatUptime(d.uptimeSec)),
-      metric("IP", ipText, { warn: ipWarn }),
-      metric("Puerto", String(d.port)),
-      metric("URL carta", d.network.cartaUrl ?? "—"),
-      metric(
-        "Última copia",
-        d.lastBackup
-          ? `${d.lastBackup.file} (${formatBytes(d.lastBackup.bytes)})`
-          : d.lastAutoAt
-            ? `Auto ${new Date(d.lastAutoAt).toLocaleString()}`
-            : "Ninguna",
+    clear(kpis);
+    kpis.append(
+      kpi(
+        "Móviles conectados",
+        document.createTextNode(`${d.menuEvents.clients} / ${d.menuEvents.maxClients}`),
       ),
-      metric("Base de datos", formatBytes(d.dbBytes)),
-      metric("Imágenes", formatBytes(d.imagesBytes)),
-      metric("Versión", `v${d.version} · esquema ${d.schemaVersion}`),
-      metric("Datos", d.dataDir),
-      metric(
+      kpi("Memoria (RSS)", document.createTextNode(`${d.memory.rssMB} MB`)),
+      kpi("Tiempo encendida", document.createTextNode(formatUptime(d.uptimeSec))),
+      kpi("IP", ipNode, { warn: ipWarn }),
+    );
+
+    clear(cartaNetBody);
+    const urlText = d.network.cartaUrl ?? "—";
+    const urlRow = el("div", { className: "row estado-url-row" });
+    urlRow.appendChild(el("code", { className: "estado-mono", text: urlText }));
+    if (d.network.cartaUrl) {
+      const copyUrl = el("button", {
+        className: "btn btn--ghost btn--sm",
+        text: "Copiar",
+        attrs: { type: "button" },
+      });
+      copyUrl.addEventListener("click", () => void copyText(d.network.cartaUrl!, "URL copiada"));
+      urlRow.appendChild(copyUrl);
+    }
+    cartaNetBody.append(
+      dlRow("URL carta", urlRow),
+      dlRow("Puerto", String(d.port)),
+      dlRow(
         "Revisión carta",
         d.menuEvents.lastRevision != null ? String(d.menuEvents.lastRevision) : "—",
       ),
+      dlRow(
+        "Red comprobada",
+        d.network.checkedAt ? new Date(d.network.checkedAt).toLocaleString() : "—",
+      ),
+    );
+
+    clear(storageBody);
+    const backupText = d.lastBackup
+      ? `${d.lastBackup.file} (${formatBytes(d.lastBackup.bytes)})`
+      : d.lastAutoAt
+        ? `Auto ${new Date(d.lastAutoAt).toLocaleString()}`
+        : "Ninguna";
+    storageBody.append(
+      dlRow("Última copia", backupText),
+      dlRow("Base de datos", formatBytes(d.dbBytes)),
+      dlRow("Imágenes", formatBytes(d.imagesBytes)),
+      dlRow("Versión", `v${d.version} · esquema ${d.schemaVersion}`),
+      dlRow("Datos", el("code", { className: "estado-mono", text: d.dataDir })),
     );
 
     clear(alertsBody);
     if (d.logAlerts.length === 0) {
       alertsBody.appendChild(
-        el("p", { className: "muted", text: "Sin avisos WARN/ERROR recientes." }),
+        el("p", { className: "muted tiny", text: "Sin avisos WARN/ERROR recientes." }),
       );
     } else {
       for (const line of d.logAlerts.slice().reverse()) {
@@ -174,8 +289,8 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
       backupWarn.appendChild(
         el("strong", {
           text: backupFail
-            ? "Fallo en una copia de seguridad reciente. Revise el log y la sección Copias."
-            : "Aún no hay copias de seguridad. Cree una en la sección Copias abajo.",
+            ? "Fallo en una copia de seguridad reciente. Revise el log y la pestaña Copias."
+            : "Aún no hay copias de seguridad. Cree una en la pestaña Copias.",
         }),
       );
     } else {
@@ -193,26 +308,16 @@ export async function renderEstado(root: HTMLElement): Promise<void> {
     }
   };
 
-  const copyBtn = logCard.querySelector("#btn-copy-diag") as HTMLButtonElement;
-  copyBtn.addEventListener("click", async () => {
+  copyDiagBtn.addEventListener("click", () => {
     if (!lastDto) return;
-    const text = JSON.stringify(lastDto, null, 2);
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast("Diagnóstico copiado", "success");
-    } catch {
-      showToast("No se pudo copiar", "error");
-    }
+    void copyText(JSON.stringify(lastDto, null, 2), "Diagnóstico copiado");
   });
 
   await tick();
   timer = setInterval(() => void tick(), REFRESH_MS);
 
-  const copiasMount = el("div", { className: "stack" });
-  wrap.appendChild(copiasMount);
   void renderCopias(copiasMount);
 
-  // Detener al salir de la vista (si el root se vacía / navega)
   const obs = new MutationObserver(() => {
     if (!root.contains(wrap)) {
       stopped = true;

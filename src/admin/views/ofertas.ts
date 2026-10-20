@@ -67,13 +67,11 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   const base = currenciesRes.items.find((c) => c.isBase) ?? currenciesRes.items[0];
   const productById = new Map(products.map((p) => [p.id, p]));
 
-  const wrap = el("div", { className: "stack ofertas" });
-
-  // Conteos vivos vía `offers` (se actualizan al pausar sin re-fetch)
+  const page = el("div", { className: "stack ofertas-page" });
 
   const newBtn = el("button", {
     className: "btn btn--primary",
-    text: "+ Crear combo / oferta",
+    text: "Crear combo / oferta",
     attrs: { type: "button" },
   });
   newBtn.addEventListener("click", () => {
@@ -82,24 +80,57 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     });
   });
 
-  wrap.appendChild(
+  page.appendChild(
     el("div", {
-      className: "row row--between ofertas__head",
+      className: "row row--between ofertas-toolbar",
       children: [
-        el("div", {
-          className: "stack",
-          children: [
-            el("p", {
-              className: "muted",
-              text: "Promociones y paquetes para la carta. Active o pause al instante.",
-            }),
-            el("p", {
-              className: "muted tiny",
-              text: `${offers.length} total · ${offers.filter((o) => o.visible).length} activos · ${offers.filter((o) => !o.visible).length} pausados`,
-            }),
-          ],
+        el("p", {
+          className: "muted tiny",
+          text: "Promociones y paquetes · active o pause al instante",
         }),
         newBtn,
+      ],
+    }),
+  );
+
+  const kpiTotal = el("div", { className: "ofertas-kpi__value", text: "0" });
+  const kpiActive = el("div", { className: "ofertas-kpi__value", text: "0" });
+  const kpiPaused = el("div", { className: "ofertas-kpi__value", text: "0" });
+  const kpiSoldout = el("div", { className: "ofertas-kpi__value", text: "0" });
+  const kpiSoldoutCard = el("div", {
+    className: "ofertas-kpi",
+    children: [
+      el("span", { className: "ofertas-kpi__label", text: "Agotadas" }),
+      kpiSoldout,
+    ],
+  });
+
+  page.appendChild(
+    el("div", {
+      className: "ofertas-kpis",
+      children: [
+        el("div", {
+          className: "ofertas-kpi",
+          children: [
+            el("span", { className: "ofertas-kpi__label", text: "Total" }),
+            kpiTotal,
+          ],
+        }),
+        el("div", {
+          className: "ofertas-kpi",
+          children: [
+            el("span", { className: "ofertas-kpi__label", text: "En carta" }),
+            kpiActive,
+          ],
+        }),
+        el("div", {
+          className: "ofertas-kpi",
+          children: [
+            el("span", { className: "ofertas-kpi__label", text: "Pausadas" }),
+            kpiPaused,
+          ],
+        }),
+        kpiSoldoutCard,
       ],
     }),
   );
@@ -131,16 +162,22 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     filterBar.appendChild(btn);
   };
   makeFilter("all", () => `Todos (${offers.length})`);
-  makeFilter("active", () => `Activos en carta (${offers.filter((o) => o.visible).length})`);
-  makeFilter("paused", () => `Pausados (${offers.filter((o) => !o.visible).length})`);
-  makeFilter("soldout", () => `Agotados (${offers.filter((o) => !o.effectiveAvailable).length})`);
-
-  wrap.appendChild(el("div", { className: "row ofertas__filters", children: [filterBar, q] }));
+  makeFilter("active", () => `En carta (${offers.filter((o) => o.visible).length})`);
+  makeFilter("paused", () => `Pausadas (${offers.filter((o) => !o.visible).length})`);
+  makeFilter("soldout", () => `Agotadas (${offers.filter((o) => !o.effectiveAvailable).length})`);
 
   const list = el("div", { className: "offer-list" });
-  wrap.appendChild(list);
 
   const paint = () => {
+    const activeN = offers.filter((o) => o.visible).length;
+    const pausedN = offers.filter((o) => !o.visible).length;
+    const soldN = offers.filter((o) => !o.effectiveAvailable).length;
+    kpiTotal.textContent = String(offers.length);
+    kpiActive.textContent = String(activeN);
+    kpiPaused.textContent = String(pausedN);
+    kpiSoldout.textContent = String(soldN);
+    kpiSoldoutCard.classList.toggle("ofertas-kpi--warn", soldN > 0);
+
     for (const f of filterBtns) {
       f.btn.textContent = f.label();
       f.btn.classList.toggle("is-active", f.id === filter);
@@ -165,11 +202,11 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     if (items.length === 0) {
       list.appendChild(
         el("div", {
-          className: "card empty",
+          className: "ofertas-empty",
           text:
             offers.length === 0
               ? "Aún no hay ofertas. Cree un combo para empezar."
-              : "Sin resultados.",
+              : "Sin resultados con este filtro.",
         }),
       );
       return;
@@ -182,8 +219,31 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
 
   q.addEventListener("input", paint);
   q.setAttribute("data-search", "");
+
+  const sectionHead = el("div", {
+    className: "ofertas-section__head",
+    children: [
+      el("h2", { className: "card__title", text: "Listado" }),
+      el("p", {
+        className: "muted tiny",
+        text: "Filtre por estado o busque por nombre de oferta o producto incluido.",
+      }),
+    ],
+  });
+
+  page.appendChild(
+    el("section", {
+      className: "card stack ofertas-section",
+      children: [
+        sectionHead,
+        el("div", { className: "row ofertas__filters", children: [filterBar, q] }),
+        list,
+      ],
+    }),
+  );
+
   paint();
-  return wrap;
+  return page;
 }
 
 function buildOfferCard(

@@ -38,6 +38,16 @@ function debounce(fn: () => void, ms: number): () => void {
   };
 }
 
+/** Bloque visual de sección dentro de Ajustes. */
+function section(title: string, hint: string | null, children: HTMLElement[]): HTMLElement {
+  const headKids: HTMLElement[] = [el("h2", { className: "card__title", text: title })];
+  if (hint) headKids.push(el("p", { className: "muted tiny", text: hint }));
+  return el("section", {
+    className: "card stack ajustes-section",
+    children: [el("div", { className: "ajustes-section__head", children: headKids }), ...children],
+  });
+}
+
 export async function renderAjustes(root: HTMLElement): Promise<void> {
   const [settings, langsRes, currenciesRes] = await Promise.all([
     api.get<Record<string, unknown>>("/api/admin/settings"),
@@ -52,17 +62,35 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
   const footerMap = localizedMap(settings, "carta.footer");
 
   clear(root);
-  const card = el("div", { className: "card stack" });
-  root.appendChild(card);
+  const page = el("div", { className: "stack ajustes-page" });
+  root.appendChild(page);
 
   const tabs = el("div", { className: "tabs", attrs: { role: "tablist" } });
   const panels = el("div", { className: "ajustes-panels stack" });
-  card.append(tabs, panels);
+  page.append(
+    el("div", {
+      className: "row row--between ajustes-toolbar",
+      children: [
+        tabs,
+        el("p", {
+          className: "muted tiny",
+          text: "Los cambios se guardan solos",
+        }),
+      ],
+    }),
+    panels,
+  );
 
-  const panelGeneral = el("div", { className: "stack", attrs: { role: "tabpanel" } });
-  const panelCarta = el("div", { className: "stack", attrs: { role: "tabpanel", hidden: "true" } });
+  const panelGeneral = el("div", {
+    className: "stack ajustes-panel",
+    attrs: { role: "tabpanel" },
+  });
+  const panelCarta = el("div", {
+    className: "stack ajustes-panel",
+    attrs: { role: "tabpanel", hidden: "true" },
+  });
   const panelSeguridad = el("div", {
-    className: "stack",
+    className: "stack ajustes-panel",
     attrs: { role: "tabpanel", hidden: "true" },
   });
   panels.append(panelGeneral, panelCarta, panelSeguridad);
@@ -70,15 +98,21 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
   const tabBtns: HTMLButtonElement[] = [];
   const showPanel = (i: number) => {
     for (let j = 0; j < tabBtns.length; j++) {
-      tabBtns[j]!.classList.toggle("is-active", j === i);
-      (panels.children[j] as HTMLElement).hidden = j !== i;
+      const active = j === i;
+      tabBtns[j]!.classList.toggle("is-active", active);
+      tabBtns[j]!.setAttribute("aria-selected", active ? "true" : "false");
+      (panels.children[j] as HTMLElement).hidden = !active;
     }
   };
   for (const [i, label] of ["General", "Carta", "Seguridad"].entries()) {
     const btn = el("button", {
       className: `tab${i === 0 ? " is-active" : ""}`,
       text: label,
-      attrs: { type: "button", role: "tab" },
+      attrs: {
+        type: "button",
+        role: "tab",
+        "aria-selected": i === 0 ? "true" : "false",
+      },
     }) as HTMLButtonElement;
     btn.addEventListener("click", () => showPanel(i));
     tabBtns.push(btn);
@@ -93,7 +127,7 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
 
   const welcomeInputs = new Map<string, HTMLInputElement>();
   const footerInputs = new Map<string, HTMLInputElement>();
-  const i18nBlock = el("div", { className: "stack" });
+  const i18nBlock = el("div", { className: "stack ajustes-i18n" });
   for (const lang of langs) {
     const w = el("input", {
       className: "input",
@@ -111,17 +145,22 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
     welcomeInputs.set(lang.code, w);
     footerInputs.set(lang.code, f);
     i18nBlock.append(
-      el("h3", {
-        className: "ajustes-group__title",
-        text: `${lang.nativeName} (${lang.code})`,
-      }),
-      el("label", {
-        className: "field",
-        children: [el("span", { text: "Bienvenida" }), w],
-      }),
-      el("label", {
-        className: "field",
-        children: [el("span", { text: "Pie de carta" }), f],
+      el("div", {
+        className: "ajustes-lang-block stack",
+        children: [
+          el("h3", {
+            className: "ajustes-group__title",
+            text: `${lang.nativeName} (${lang.code})`,
+          }),
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Bienvenida" }), w],
+          }),
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Pie de carta" }), f],
+          }),
+        ],
       }),
     );
   }
@@ -185,23 +224,28 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
   }
 
   panelGeneral.append(
-    el("label", {
-      className: "field",
-      children: [el("span", { text: "Nombre del restaurante" }), name],
-    }),
-    i18nBlock,
-    el("label", {
-      className: "field",
-      children: [el("span", { text: "Idioma por defecto de la carta" }), defaultLang],
-    }),
-    el("label", {
-      className: "field",
-      children: [el("span", { text: "Moneda por defecto de la carta" }), defaultCurrency],
-    }),
-    el("p", {
-      className: "muted tiny",
-      text: "Los textos se guardan solos tras una pausa breve al escribir.",
-    }),
+    section("Identidad", "Nombre que ven los clientes en la carta.", [
+      el("label", {
+        className: "field",
+        children: [el("span", { text: "Nombre del restaurante" }), name],
+      }),
+    ]),
+    section("Textos de la carta", "Bienvenida y pie por idioma activo.", [i18nBlock]),
+    section("Valores por defecto", "Idioma y moneda al abrir la carta.", [
+      el("div", {
+        className: "ajustes-defaults",
+        children: [
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Idioma por defecto" }), defaultLang],
+          }),
+          el("label", {
+            className: "field",
+            children: [el("span", { text: "Moneda por defecto" }), defaultCurrency],
+          }),
+        ],
+      }),
+    ]),
   );
 
   // —— Carta ——
@@ -255,14 +299,8 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
     },
   });
 
-  const group = (title: string, children: HTMLElement[]) =>
-    el("div", {
-      className: "ajustes-group stack",
-      children: [el("h3", { className: "ajustes-group__title", text: title }), ...children],
-    });
-
   panelCarta.append(
-    group("Visibilidad", [
+    section("Visibilidad", "Qué se muestra en la carta pública.", [
       settingToggle({
         label: "Mostrar fotos en la carta",
         checked: boolSetting(settings, "carta.show_images", true),
@@ -312,7 +350,7 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
         },
       }).root,
     ]),
-    group("Agotados", [
+    section("Agotados", "Cómo aparecen los platos no disponibles.", [
       settingToggle({
         label: "Mostrar agotados en la carta",
         checked: boolSetting(settings, "carta.show_soldout", true),
@@ -332,7 +370,7 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
       }).root,
       soldOutCollapsed.root,
     ]),
-    group("Secciones", [
+    section("Secciones", "Comportamiento de Entrantes, Platos, etc.", [
       settingToggle({
         label: "Secciones colapsables (Entrantes, Platos…)",
         checked: boolSetting(settings, "carta.sections_collapsible", false),
@@ -352,10 +390,6 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
       }).root,
       sectionsOpenDefault.root,
     ]),
-    el("p", {
-      className: "muted tiny",
-      text: "Los interruptores se guardan al tocarlos.",
-    }),
   );
 
   // —— Seguridad ——
@@ -412,14 +446,16 @@ export async function renderAjustes(root: HTMLElement): Promise<void> {
   });
 
   panelSeguridad.append(
-    el("label", {
-      className: "field",
-      children: [el("span", { text: "PIN del Admin (opcional)" }), pin],
-    }),
-    el("p", {
-      className: "muted tiny",
-      text: "Escriba 4–8 dígitos y pulse fuera del campo (o Enter) para guardar.",
-    }),
+    section(
+      "PIN del Admin",
+      "Escriba 4–8 dígitos y pulse fuera del campo (o Enter) para guardar.",
+      [
+        el("label", {
+          className: "field",
+          children: [el("span", { text: "Nuevo PIN" }), pin],
+        }),
+      ],
+    ),
     dangerZone({
       title: "Zona peligrosa",
       hint: "Desactivar el PIN deja el Admin sin contraseña en la red local.",

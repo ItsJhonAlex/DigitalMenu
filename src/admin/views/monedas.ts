@@ -18,6 +18,15 @@ function toMoney(c: Currency): MoneyCurrency {
   };
 }
 
+function section(title: string, hint: string | null, children: HTMLElement[]): HTMLElement {
+  const headKids: HTMLElement[] = [el("h2", { className: "card__title", text: title })];
+  if (hint) headKids.push(el("p", { className: "muted tiny", text: hint }));
+  return el("section", {
+    className: "card stack monedas-section",
+    children: [el("div", { className: "monedas-section__head", children: headKids }), ...children],
+  });
+}
+
 export async function renderMonedas(root: HTMLElement): Promise<void> {
   const refresh = async () => {
     clear(root);
@@ -29,33 +38,62 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
   async function build(): Promise<HTMLElement> {
     const { items } = await api.get<{ items: Currency[] }>("/api/admin/currencies");
     const base = items.find((c) => c.isBase) ?? items[0];
-    const wrap = el("div", { className: "stack" });
+    const page = el("div", { className: "stack monedas-page" });
+
     const add = el("button", {
       className: "btn btn--primary",
       text: "Añadir moneda",
       attrs: { type: "button" },
     });
     add.addEventListener("click", () => openCurrencyModal(null, refresh));
-    wrap.appendChild(
+
+    page.appendChild(
       el("div", {
-        className: "row row--between",
-        children: [el("p", { className: "muted", text: "Moneda base y tasas del día" }), add],
+        className: "row row--between monedas-toolbar",
+        children: [
+          el("p", {
+            className: "muted tiny",
+            text: "La moneda base define los precios; el resto usa tasa del día",
+          }),
+          add,
+        ],
       }),
     );
 
-    const table = el("table", { className: "data" });
-    table.appendChild(
-      el("thead", {
+    const activeCount = items.filter((c) => c.active).length;
+    page.appendChild(
+      el("div", {
+        className: "monedas-kpis",
         children: [
-          el("tr", {
-            children: ["Base", "Código", "Nombre", "Tasa", "Activa", "Acciones"].map((t) =>
-              el("th", { text: t }),
-            ),
+          el("div", {
+            className: "monedas-kpi",
+            children: [
+              el("span", { className: "monedas-kpi__label", text: "Monedas" }),
+              el("div", { className: "monedas-kpi__value", text: String(items.length) }),
+            ],
+          }),
+          el("div", {
+            className: "monedas-kpi",
+            children: [
+              el("span", { className: "monedas-kpi__label", text: "Activas" }),
+              el("div", { className: "monedas-kpi__value", text: String(activeCount) }),
+            ],
+          }),
+          el("div", {
+            className: "monedas-kpi monedas-kpi--base",
+            children: [
+              el("span", { className: "monedas-kpi__label", text: "Base" }),
+              el("div", {
+                className: "monedas-kpi__value",
+                text: base ? `${base.code} (${base.symbol})` : "—",
+              }),
+            ],
           }),
         ],
       }),
     );
-    const tbody = el("tbody");
+
+    const list = el("div", { className: "stack monedas-list" });
     for (const c of items) {
       const makeBase = el("button", {
         className: "btn btn--ghost btn--sm",
@@ -81,7 +119,7 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
 
       const editRate = el("button", {
         className: "btn btn--ghost btn--sm",
-        text: c.isBase ? "—" : "Tasa",
+        text: "Tasa",
         attrs: { type: "button", ...(c.isBase ? { disabled: "" } : {}) },
       });
       if (!c.isBase) {
@@ -114,6 +152,7 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
           });
           c.active = activeToggle.checked;
           showToast(activeToggle.checked ? `${c.code} activa` : `${c.code} desactivada`, "success");
+          await refresh();
         } catch (err) {
           activeToggle.checked = !activeToggle.checked;
           showToast(err instanceof Error ? err.message : "Error", "error");
@@ -142,28 +181,93 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
         }
       });
 
-      tbody.appendChild(
-        el("tr", {
+      const chips: HTMLElement[] = [];
+      if (c.isBase) chips.push(el("span", { className: "chip chip--ok", text: "Base" }));
+      if (!c.active) chips.push(el("span", { className: "chip chip--off", text: "Inactiva" }));
+
+      const rateLine = c.isBase
+        ? el("p", {
+            className: "muted tiny",
+            text: "Moneda base de los precios. No se puede desactivar ni eliminar.",
+          })
+        : el("div", {
+            className: "monedas-card__rate",
+            children: [
+              el("span", {
+                className: "monedas-card__rate-value",
+                text: `1 ${c.code} = ${c.basePerUnit} ${base?.code ?? "base"}`,
+              }),
+              el("span", {
+                className: "muted tiny",
+                text: formatRateUpdated(c.rateUpdatedAt),
+              }),
+            ],
+          });
+
+      let sampleText = "";
+      if (base) {
+        try {
+          sampleText = formatPrice(100, toMoney(base), toMoney(c));
+        } catch {
+          sampleText = "";
+        }
+      }
+
+      const cardKids: HTMLElement[] = [
+        el("div", {
+          className: "row row--between monedas-card__top",
           children: [
-            el("td", { text: c.isBase ? "●" : "" }),
-            el("td", { text: c.code }),
-            el("td", { text: c.name }),
-            el("td", {
-              text: c.isBase ? "—" : `${c.basePerUnit} · ${formatRateUpdated(c.rateUpdatedAt)}`,
-            }),
-            el("td", { children: [activeToggle] }),
-            el("td", {
+            el("div", {
+              className: "monedas-card__identity",
               children: [
-                el("div", { className: "row", children: [editRate, editFmt, makeBase, del] }),
+                el("strong", { className: "monedas-card__code", text: c.code }),
+                el("span", { className: "monedas-card__symbol", text: c.symbol }),
+                el("span", { className: "monedas-card__name", text: c.name }),
+                ...(chips.length
+                  ? [el("div", { className: "row monedas-card__meta", children: chips })]
+                  : []),
               ],
+            }),
+            el("label", {
+              className: "row monedas-card__active",
+              children: [activeToggle, el("span", { text: "Activa" })],
             }),
           ],
         }),
+        rateLine,
+      ];
+      if (sampleText) {
+        cardKids.push(
+          el("p", {
+            className: "muted tiny monedas-card__sample",
+            text: `Ejemplo 100 ${base?.code ?? ""} → ${sampleText}`,
+          }),
+        );
+      }
+      cardKids.push(
+        el("div", {
+          className: "row monedas-card__actions",
+          children: [editRate, editFmt, makeBase, del],
+        }),
+      );
+
+      list.appendChild(
+        el("article", {
+          className: `monedas-card${c.active ? "" : " is-off"}${c.isBase ? " is-base" : ""}`,
+          children: cardKids,
+        }),
       );
     }
-    table.appendChild(tbody);
-    wrap.appendChild(el("div", { className: "table-wrap", children: [table] }));
-    return wrap;
+
+    page.appendChild(
+      section(
+        "Monedas",
+        "Ajuste la tasa del día y el formato de visualización en la carta.",
+        [list],
+      ),
+    );
+
+    return page;
   }
 }
 

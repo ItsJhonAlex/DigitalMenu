@@ -44,20 +44,119 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
   const base = currencies.items.find((c) => c.isBase);
   const others = currencies.items.filter((c) => c.active && !c.isBase);
 
-  const grid = el("div", { className: "grid grid--2" });
+  const page = el("div", { className: "stack inicio-page" });
+
+  page.appendChild(
+    el("div", {
+      className: "row row--between inicio-toolbar",
+      children: [
+        el("p", {
+          className: "muted tiny",
+          text: "Tasas, estado y disponibilidad rápida del día",
+        }),
+        el("div", {
+          className: "row inicio-toolbar__actions",
+          children: [
+            el("a", {
+              className: "btn btn--ghost btn--sm",
+              text: "Nuevo producto",
+              attrs: { href: "#/productos?nuevo=1" },
+            }),
+            el("a", {
+              className: "btn btn--primary btn--sm",
+              text: "Ver carta",
+              attrs: {
+                href: net.cartaUrl ?? "/",
+                target: "_blank",
+                rel: "noopener",
+              },
+            }),
+          ],
+        }),
+      ],
+    }),
+  );
+
+  const all = products.items;
+  const kpiTotalVal = el("div", { className: "inicio-kpi__value", text: "0" });
+  const kpiAvailVal = el("div", { className: "inicio-kpi__value", text: "0" });
+  const kpiSoldVal = el("div", { className: "inicio-kpi__value", text: "0" });
+  const kpiSoldCard = el("div", {
+    className: "inicio-kpi",
+    children: [el("span", { className: "inicio-kpi__label", text: "Agotados" }), kpiSoldVal],
+  });
+
+  const paintKpis = () => {
+    const soldN = all.filter((p) => !p.available).length;
+    kpiTotalVal.textContent = String(all.length);
+    kpiAvailVal.textContent = String(all.filter((p) => p.available).length);
+    kpiSoldVal.textContent = String(soldN);
+    kpiSoldCard.classList.toggle("inicio-kpi--warn", soldN > 0);
+  };
+  paintKpis();
+
+  page.appendChild(
+    el("div", {
+      className: "inicio-kpis",
+      children: [
+        el("div", {
+          className: "inicio-kpi",
+          children: [
+            el("span", { className: "inicio-kpi__label", text: "Productos" }),
+            kpiTotalVal,
+          ],
+        }),
+        el("div", {
+          className: "inicio-kpi",
+          children: [
+            el("span", { className: "inicio-kpi__label", text: "Disponibles" }),
+            kpiAvailVal,
+          ],
+        }),
+        kpiSoldCard,
+      ],
+    }),
+  );
+
+  const grid = el("div", { className: "grid grid--2 inicio-grid" });
 
   // Tasas
-  const ratesCard = el("section", { className: "card stack" });
-  ratesCard.appendChild(el("h2", { className: "card__title", text: "Tasa del día" }));
+  const ratesCard = el("section", { className: "card stack inicio-card" });
+  ratesCard.append(
+    el("div", {
+      className: "inicio-card__head",
+      children: [
+        el("h2", { className: "card__title", text: "Tasa del día" }),
+        el("p", {
+          className: "muted tiny",
+          text: "Cambio de monedas secundarias a la base.",
+        }),
+      ],
+    }),
+  );
+  if (base) {
+    ratesCard.appendChild(
+      el("div", {
+        className: "inicio-rate-base",
+        children: [
+          el("span", { className: "chip chip--ok", text: `Base ${base.code}` }),
+          el("span", {
+            className: "muted tiny",
+            text: base.name || base.symbol || base.code,
+          }),
+        ],
+      }),
+    );
+  }
   if (others.length === 0) {
     ratesCard.appendChild(
       el("p", { className: "muted", text: "No hay monedas secundarias activas." }),
     );
   }
+  const ratesList = el("div", { className: "stack inicio-rates" });
   for (const cur of others) {
-    const row = el("div", { className: "row" });
     const input = el("input", {
-      className: "input",
+      className: "input inicio-rate-input",
       attrs: {
         type: "number",
         step: "any",
@@ -82,44 +181,111 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
         showToast(err instanceof Error ? err.message : "Error", "error");
       }
     });
-    row.append(
+    ratesList.appendChild(
       el("div", {
-        className: "grow",
+        className: "inicio-rate",
         children: [
           el("div", {
-            text: `1 ${cur.code} = ${base?.code ?? "BASE"}`,
+            className: "inicio-rate__top",
+            children: [
+              el("div", {
+                className: "inicio-rate__identity",
+                children: [
+                  el("strong", { className: "inicio-rate__code", text: cur.code }),
+                  el("span", {
+                    className: "inicio-rate__eq muted tiny",
+                    text: `1 ${cur.code} → ${base?.code ?? "BASE"}`,
+                  }),
+                ],
+              }),
+              el("span", {
+                className: "muted tiny",
+                text: formatRateUpdated(cur.rateUpdatedAt),
+              }),
+            ],
           }),
-          el("p", {
-            className: "muted tiny",
-            text: `Actualizada: ${formatRateUpdated(cur.rateUpdatedAt)}`,
+          el("div", {
+            className: "inicio-rate__edit",
+            children: [
+              el("div", {
+                className: "inicio-rate__field",
+                children: [
+                  input,
+                  el("span", {
+                    className: "inicio-rate__unit muted tiny",
+                    text: base?.code ?? "",
+                  }),
+                ],
+              }),
+              save,
+            ],
           }),
         ],
       }),
-      input,
-      save,
     );
-    ratesCard.appendChild(row);
   }
+  if (others.length > 0) ratesCard.appendChild(ratesList);
   grid.appendChild(ratesCard);
 
   // Estado (resumen; detalle en vivo → #/estado)
   const sseClients = diag.menuEvents?.clients;
-  const statusCard = el("section", { className: "card stack" });
-  statusCard.appendChild(el("h2", { className: "card__title", text: "Estado del sistema" }));
+  const uptimeMin = Math.floor(diag.uptimeSec / 60);
+  const statusRow = (label: string, value: string | HTMLElement) =>
+    el("div", {
+      className: "inicio-status__row",
+      children: [
+        el("span", { className: "inicio-status__label", text: label }),
+        typeof value === "string"
+          ? el("span", { className: "inicio-status__value", text: value })
+          : el("div", { className: "inicio-status__value", children: [value] }),
+      ],
+    });
+
+  const statusCard = el("section", { className: "card stack inicio-card" });
   statusCard.append(
-    el("p", { text: restaurant }),
-    el("p", {
-      className: "muted tiny",
-      text: `Carta: ${net.cartaUrl ?? "—"} · Puerto ${net.port}`,
-    }),
-    el("p", {
-      className: "muted tiny",
-      text: `v${diag.version} · RAM ${diag.memory.rssMB} MB · ${Math.floor(diag.uptimeSec / 60)} min encendida${
-        sseClients != null ? ` · ${sseClients} móvil(es)` : ""
-      }`,
+    el("div", {
+      className: "inicio-card__head",
+      children: [
+        el("h2", { className: "card__title", text: "Estado del sistema" }),
+        el("p", {
+          className: "muted tiny",
+          text: "Resumen rápido del servicio y la carta.",
+        }),
+      ],
     }),
     el("div", {
-      className: "row",
+      className: "inicio-status__hero",
+      children: [
+        el("strong", { className: "inicio-status__name", text: restaurant }),
+        el("span", {
+          className: "chip chip--ok",
+          text: sseClients != null && sseClients > 0 ? `${sseClients} móvil(es)` : "En marcha",
+        }),
+      ],
+    }),
+    el("div", {
+      className: "inicio-status__dl",
+      children: [
+        statusRow(
+          "Carta",
+          el("a", {
+            className: "inicio-status__link",
+            text: net.cartaUrl ?? "—",
+            attrs: {
+              href: net.cartaUrl ?? "/",
+              target: "_blank",
+              rel: "noopener",
+            },
+          }),
+        ),
+        statusRow("Puerto", String(net.port)),
+        statusRow("Versión", `v${diag.version}`),
+        statusRow("Memoria", `${diag.memory.rssMB} MB`),
+        statusRow("Encendida", `${uptimeMin} min`),
+      ],
+    }),
+    el("div", {
+      className: "row inicio-status__actions",
       children: [
         el("a", {
           className: "btn btn--primary btn--sm",
@@ -131,37 +297,36 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
           text: "Imprimir QR",
           attrs: { href: "#/red" },
         }),
-        el("a", {
-          className: "btn btn--ghost btn--sm",
-          text: "Nuevo producto",
-          attrs: { href: "#/productos?nuevo=1" },
-        }),
-        el("a", {
-          className: "btn btn--ghost btn--sm",
-          text: "Ver carta",
-          attrs: {
-            href: net.cartaUrl ?? "/",
-            target: "_blank",
-            rel: "noopener",
-          },
-        }),
       ],
     }),
   );
   grid.appendChild(statusCard);
 
   // Disponibilidad
-  const availCard = el("section", { className: "card stack" });
-  availCard.style.gridColumn = "1 / -1";
-  availCard.appendChild(el("h2", { className: "card__title", text: "Disponibilidad rápida" }));
+  const availCard = el("section", {
+    className: "card stack inicio-card inicio-card--wide",
+  });
+  availCard.append(
+    el("h2", { className: "card__title", text: "Disponibilidad rápida" }),
+    el("p", {
+      className: "muted tiny",
+      text: "Marque agotados sin salir del inicio. Los cambios se reflejan en la carta.",
+    }),
+  );
 
-  const toolbar = el("div", { className: "row" });
   const search = el("input", {
-    className: "input grow",
-    attrs: { type: "search", placeholder: "Buscar producto…", "data-search": "" },
+    className: "input inicio-avail__search",
+    attrs: {
+      type: "text",
+      placeholder: "Buscar…",
+      "data-search": "",
+      "aria-label": "Buscar producto",
+      autocomplete: "off",
+      spellcheck: "false",
+    },
   }) as HTMLInputElement;
   const onlySold = el("label", {
-    className: "row",
+    className: "row inicio-avail__check",
     children: [
       el("input", { attrs: { type: "checkbox" } }),
       el("span", { className: "tiny", text: "Solo agotados" }),
@@ -188,8 +353,12 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
       showToast(err instanceof Error ? err.message : "Error", "error");
     }
   });
-  toolbar.append(search, onlySold, resetBtn);
-  availCard.appendChild(toolbar);
+  availCard.appendChild(
+    el("div", {
+      className: "inicio-avail__filters",
+      children: [search, onlySold, resetBtn],
+    }),
+  );
 
   const list = el("div", { className: "list-compact" });
   const paint = () => {
@@ -213,6 +382,7 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
         try {
           await api.patch(`/api/admin/products/${p.id}`, { available: toggle.checked });
           p.available = toggle.checked;
+          paintKpis();
           showToast(toggle.checked ? "Disponible" : "Agotado", "success");
         } catch (err) {
           toggle.checked = !toggle.checked;
@@ -248,6 +418,7 @@ export async function renderInicio(root: HTMLElement): Promise<void> {
   availCard.appendChild(list);
   grid.appendChild(availCard);
 
+  page.appendChild(grid);
   clear(root);
-  root.appendChild(grid);
+  root.appendChild(page);
 }

@@ -32,7 +32,7 @@ const routes: Route[] = [
     label: "Inicio",
     icon: "⌂",
     title: "Inicio",
-    sub: "Tareas del día en Avanzar In Time",
+    sub: "Panel rápido del día",
     render: renderInicio,
   },
   {
@@ -224,7 +224,7 @@ async function render(): Promise<void> {
   }
   if (sub) {
     sub.textContent = editingProduct
-      ? "Ficha completa · idiomas, foto y precio"
+      ? "Nombre, foto, precio y disponibilidad en carta"
       : editingOffer
         ? "Componentes, precio especial y estado en carta"
         : route.sub;

@@ -142,24 +142,76 @@ function allergenLabel(menu: MenuResponse, code: string): string {
   return code;
 }
 
-/** Ingredientes (texto pequeño) + chips de alérgenos; solo si hay datos. */
+/** Partes de ingredientes separadas por coma / punto y coma. */
+function ingredientParts(raw: string): string[] {
+  return raw
+    .split(/[,;·|/]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Ingredientes + alérgenos; solo si hay datos. */
 function appendIngredientsAllergens(parent: HTMLElement, p: MenuProduct, menu: MenuResponse): void {
-  if (p.ingredients) {
-    const label = menu.ui.ingredients ?? "Ingredientes";
-    parent.appendChild(
-      el("p", {
-        className: "product-ingredients",
-        text: `${label}: ${p.ingredients}`,
+  const hasIngredients = Boolean(p.ingredients?.trim());
+  const hasAllergens = p.allergens.length > 0;
+  if (!hasIngredients && !hasAllergens) return;
+
+  const facts = el("div", { className: "product-facts" });
+
+  if (hasIngredients && p.ingredients) {
+    const parts = ingredientParts(p.ingredients);
+    const block = el("div", {
+      className: "product-ingredients",
+      attrs: { "aria-label": menu.ui.ingredients ?? "Ingredientes" },
+    });
+    block.appendChild(
+      el("span", {
+        className: "product-facts__label",
+        text: menu.ui.ingredients ?? "Ingredientes",
       }),
     );
+    if (parts.length > 1) {
+      const chips = el("div", {
+        className: "product-ingredients__chips",
+        attrs: { role: "list" },
+      });
+      for (const part of parts) {
+        chips.appendChild(
+          el("span", {
+            className: "ingredient-chip",
+            text: part,
+            attrs: { role: "listitem" },
+          }),
+        );
+      }
+      block.appendChild(chips);
+    } else {
+      block.appendChild(
+        el("span", {
+          className: "product-ingredients__text",
+          text: parts[0] ?? p.ingredients.trim(),
+        }),
+      );
+    }
+    facts.appendChild(block);
   }
-  if (p.allergens.length > 0) {
-    const row = el("div", {
+
+  if (hasAllergens) {
+    const block = el("div", {
       className: "product-allergens",
       attrs: {
-        role: "list",
         "aria-label": menu.ui.allergens ?? "Alérgenos",
       },
+    });
+    block.appendChild(
+      el("span", {
+        className: "product-facts__label",
+        text: menu.ui.allergens ?? "Alérgenos",
+      }),
+    );
+    const row = el("div", {
+      className: "product-allergens__chips",
+      attrs: { role: "list" },
     });
     for (const code of p.allergens) {
       const name = allergenLabel(menu, code);
@@ -171,8 +223,11 @@ function appendIngredientsAllergens(parent: HTMLElement, p: MenuProduct, menu: M
         }),
       );
     }
-    parent.appendChild(row);
+    block.appendChild(row);
+    facts.appendChild(block);
   }
+
+  parent.appendChild(facts);
 }
 
 /** full = platos; drink = bebidas/cócteles (foto horizontal amplia); compact = artículos */

@@ -32,4 +32,17 @@ describe("qr UTF-8", () => {
       }),
     ).toBe("WIFI:T:WPA;S:Cañón ☕;P:a\\;b;H:false;;");
   });
+
+  test("fg colorea módulos y logo se embebe", () => {
+    const red = makeQrSvg("http://example.local/", 200, { fg: "#b70011" });
+    expect(red).toContain('fill="#b70011"');
+    const tinyPng =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const withLogo = makeQrSvg("http://example.local/", 200, {
+      fg: "#1e1b19",
+      logoDataUrl: tinyPng,
+    });
+    expect(withLogo).toContain("<image ");
+    expect(withLogo).toContain(tinyPng);
+  });
 });
