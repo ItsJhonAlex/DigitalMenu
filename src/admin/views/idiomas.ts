@@ -27,10 +27,18 @@ function progressBar(translated: number, total: number): HTMLElement {
   fill.style.width = `${pct}%`;
   return el("div", {
     className: "idiomas-progress",
-    attrs: { role: "progressbar", "aria-valuenow": String(pct), "aria-valuemin": "0", "aria-valuemax": "100" },
+    attrs: {
+      role: "progressbar",
+      "aria-valuenow": String(pct),
+      "aria-valuemin": "0",
+      "aria-valuemax": "100",
+    },
     children: [
       el("div", { className: "idiomas-progress__track", children: [fill] }),
-      el("span", { className: "idiomas-progress__label", text: `${translated}/${total} · ${pct}%` }),
+      el("span", {
+        className: "idiomas-progress__label",
+        text: `${translated}/${total} · ${pct}%`,
+      }),
     ],
   });
 }

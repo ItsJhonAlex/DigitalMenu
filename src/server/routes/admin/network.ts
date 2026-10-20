@@ -24,8 +24,7 @@ function qrRenderOpts(
   query?: { fg?: string | undefined; logo?: string | undefined },
 ) {
   const savedFg = repos.settings.getJson<string>("qr.fg", "#1e1b19");
-  const fg =
-    query?.fg && /^#[0-9a-fA-F]{6}$/.test(query.fg) ? query.fg.toLowerCase() : savedFg;
+  const fg = query?.fg && /^#[0-9a-fA-F]{6}$/.test(query.fg) ? query.fg.toLowerCase() : savedFg;
   const showLogo =
     query?.logo === "1" || query?.logo === "0"
       ? query.logo === "1"

@@ -63,8 +63,8 @@ async function build(items: Category[], refresh: () => Promise<void>): Promise<H
   });
 
   const isIncomplete = (c: Category) => {
-    const missingDesc = !(c.i18n.es?.description?.trim());
-    const missingEn = !(c.i18n.en?.name?.trim());
+    const missingDesc = !c.i18n.es?.description?.trim();
+    const missingEn = !c.i18n.en?.name?.trim();
     return missingDesc || missingEn;
   };
 

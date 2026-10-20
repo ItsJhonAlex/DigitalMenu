@@ -99,10 +99,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   const kpiSoldout = el("div", { className: "ofertas-kpi__value", text: "0" });
   const kpiSoldoutCard = el("div", {
     className: "ofertas-kpi",
-    children: [
-      el("span", { className: "ofertas-kpi__label", text: "Agotadas" }),
-      kpiSoldout,
-    ],
+    children: [el("span", { className: "ofertas-kpi__label", text: "Agotadas" }), kpiSoldout],
   });
 
   page.appendChild(
@@ -111,24 +108,15 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
       children: [
         el("div", {
           className: "ofertas-kpi",
-          children: [
-            el("span", { className: "ofertas-kpi__label", text: "Total" }),
-            kpiTotal,
-          ],
+          children: [el("span", { className: "ofertas-kpi__label", text: "Total" }), kpiTotal],
         }),
         el("div", {
           className: "ofertas-kpi",
-          children: [
-            el("span", { className: "ofertas-kpi__label", text: "En carta" }),
-            kpiActive,
-          ],
+          children: [el("span", { className: "ofertas-kpi__label", text: "En carta" }), kpiActive],
         }),
         el("div", {
           className: "ofertas-kpi",
-          children: [
-            el("span", { className: "ofertas-kpi__label", text: "Pausadas" }),
-            kpiPaused,
-          ],
+          children: [el("span", { className: "ofertas-kpi__label", text: "Pausadas" }), kpiPaused],
         }),
         kpiSoldoutCard,
       ],

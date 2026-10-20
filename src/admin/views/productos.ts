@@ -144,19 +144,33 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
     ["bebida", "Bebida"],
     ["articulo", "Artículo"],
   ] as const) {
-    makeTab("type", v, t, () => typeFilter, (v) => {
-      typeFilter = v;
-    });
+    makeTab(
+      "type",
+      v,
+      t,
+      () => typeFilter,
+      (v) => {
+        typeFilter = v;
+      },
+    );
   }
-  tabsBar.appendChild(el("span", { className: "productos-filters__sep", attrs: { "aria-hidden": "true" } }));
+  tabsBar.appendChild(
+    el("span", { className: "productos-filters__sep", attrs: { "aria-hidden": "true" } }),
+  );
   for (const [v, t] of [
     ["", "Todas"],
     ["available", "Disp."],
     ["soldout", "Agotados"],
   ] as const) {
-    makeTab("status", v, t, () => statusFilter, (v) => {
-      statusFilter = v;
-    });
+    makeTab(
+      "status",
+      v,
+      t,
+      () => statusFilter,
+      (v) => {
+        statusFilter = v;
+      },
+    );
   }
 
   const untranslatedChip = el("div", { className: "productos-filters__chip" });
@@ -207,7 +221,7 @@ async function buildList(root: HTMLElement): Promise<HTMLElement> {
   );
 
   const isIncomplete = (p: Product) => {
-    const missingDesc = !(p.i18n.es?.description?.trim());
+    const missingDesc = !p.i18n.es?.description?.trim();
     const missingTr = (p.missingLangs?.length ?? 0) > 0;
     return missingDesc || missingTr;
   };
@@ -838,9 +852,7 @@ async function renderEditPage(root: HTMLElement, productId: number): Promise<voi
   }
 
   const hasExtrasData = Boolean(
-    product.ingredientsEs ||
-      product.ingredientsEn ||
-      (product.allergens?.length ?? 0) > 0,
+    product.ingredientsEs || product.ingredientsEn || (product.allergens?.length ?? 0) > 0,
   );
   const extrasFold = el("details", {
     className: "fold product-edit__extras",

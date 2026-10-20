@@ -29,7 +29,10 @@ type QrCardOpts = {
   bust: number;
 };
 
-function qrImgSrc(kind: "wifi" | "carta", opts: Pick<QrCardOpts, "fg" | "showLogo" | "bust">): string {
+function qrImgSrc(
+  kind: "wifi" | "carta",
+  opts: Pick<QrCardOpts, "fg" | "showLogo" | "bust">,
+): string {
   const q = new URLSearchParams({
     size: "280",
     t: String(opts.bust),
@@ -131,10 +134,7 @@ export async function renderRedQr(root: HTMLElement): Promise<void> {
 
   const tabs = el("div", { className: "tabs", attrs: { role: "tablist" } });
   const panels = el("div", { className: "redqr-tab-panels stack" });
-  page.append(
-    el("div", { className: "row row--between redqr-toolbar", children: [tabs] }),
-    panels,
-  );
+  page.append(el("div", { className: "row row--between redqr-toolbar", children: [tabs] }), panels);
 
   const panelRed = el("div", {
     className: "stack redqr-panel",
@@ -610,9 +610,7 @@ export async function renderRedQr(root: HTMLElement): Promise<void> {
           }),
           el("div", {
             className: "row redqr-tarjeta__toolbar",
-            children: [
-              el("div", { className: "row redqr-actions", children: [printBtn, pngBtn] }),
-            ],
+            children: [el("div", { className: "row redqr-actions", children: [printBtn, pngBtn] })],
           }),
         ],
       }),

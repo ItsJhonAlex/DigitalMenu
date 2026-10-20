@@ -260,11 +260,9 @@ export async function renderMonedas(root: HTMLElement): Promise<void> {
     }
 
     page.appendChild(
-      section(
-        "Monedas",
-        "Ajuste la tasa del día y el formato de visualización en la carta.",
-        [list],
-      ),
+      section("Monedas", "Ajuste la tasa del día y el formato de visualización en la carta.", [
+        list,
+      ]),
     );
 
     return page;
